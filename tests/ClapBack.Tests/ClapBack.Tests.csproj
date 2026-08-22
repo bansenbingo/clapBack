@@ -12,5 +12,6 @@
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <ProjectReference Include="..\..\src\ClapBack.Core\ClapBack.Core.csproj" />
+    <ProjectReference Include="..\..\src\ClapBack.Stt\ClapBack.Stt.csproj" />
   </ItemGroup>
 </Project>

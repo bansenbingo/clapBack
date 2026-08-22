@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using MessageBox = System.Windows.MessageBox;
 
 namespace ClapBack.Windows;
 
@@ -29,7 +30,7 @@ public partial class MainWindow : Window
         _source?.AddHook(WndProc);
         if (!RegisterHotKey(_handle, HotkeyId, 0, _hotkey))
         {
-            MessageBox.Show("F13 热键注册失败，请在设置中选择其他热键。", "ClapBack", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show("CapsLock 热键注册失败，请在设置中选择其他热键。", "ClapBack", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

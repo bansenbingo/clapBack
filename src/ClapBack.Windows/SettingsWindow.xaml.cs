@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Windows.Controls;
+using MessageBox = System.Windows.MessageBox;
 using ClapBack.Core.Abstractions;
 using ClapBack.Core.Models;
 
@@ -18,7 +20,22 @@ public partial class SettingsWindow : Window
         _settingsStore = settingsStore;
         _credentialStore = credentialStore;
         Settings = settings;
+        AutoSendCheckBox.IsChecked = settings.AutoSend;
+        RestoreClipboardCheckBox.IsChecked = settings.RestoreClipboard;
+        LocalModelVariantComboBox.SelectedIndex = (int)settings.LocalModelVariant;
+        TranscriptionModeComboBox.Items.Add("本地优先（失败时云端回退）");
+        TranscriptionModeComboBox.Items.Add("仅本地");
+        TranscriptionModeComboBox.Items.Add("仅云端");
+        TranscriptionModeComboBox.SelectedIndex = (int)settings.TranscriptionMode;
+        LocalRuntimeTextBox.Text = settings.LocalSttRuntimePath;
+        LocalModelTextBox.Text = settings.LocalModelPath;
+        LocalVadModelTextBox.Text = settings.LocalVadModelPath;
+        LocalSha256TextBox.Text = settings.LocalModelSha256;
+        LocalThreadsTextBox.Text = settings.LocalSttThreads.ToString();
+        LocalTimeoutTextBox.Text = settings.LocalSttTimeoutSeconds.ToString();
+        SelectBackend(settings.LocalSttBackend);
         BaseUrlTextBox.Text = settings.SttBaseUrl;
+        CloudProtocolTextBox.Text = settings.CloudProtocol;
         ModelTextBox.Text = settings.Model;
         LanguageTextBox.Text = settings.Language;
         MaxSecondsTextBox.Text = settings.MaxRecordingSeconds.ToString();
@@ -43,13 +60,43 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        if (!int.TryParse(LocalThreadsTextBox.Text, out var localThreads) || localThreads is < 1 or > 64)
+        {
+            MessageBox.Show("本地线程数必须是 1 到 64 之间的整数。", "ClapBack", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (!int.TryParse(LocalTimeoutTextBox.Text, out var localTimeout) || localTimeout is < 1 or > 300)
+        {
+            MessageBox.Show("本地识别超时必须是 1 到 300 之间的整数。", "ClapBack", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (TranscriptionModeComboBox.SelectedIndex is < 0 or > 2)
+        {
+            MessageBox.Show("请选择识别模式。", "ClapBack", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
         Settings = Settings with
         {
+            TranscriptionMode = (TranscriptionMode)TranscriptionModeComboBox.SelectedIndex,
+            LocalModelVariant = (LocalModelVariant)Math.Max(0, LocalModelVariantComboBox.SelectedIndex),
+            LocalSttRuntimePath = LocalRuntimeTextBox.Text.Trim(),
+            LocalModelPath = LocalModelTextBox.Text.Trim(),
+            LocalVadModelPath = LocalVadModelTextBox.Text.Trim(),
+            LocalModelSha256 = LocalSha256TextBox.Text.Trim(),
+            LocalSttBackend = GetSelectedBackend(),
+            LocalSttThreads = localThreads,
+            LocalSttTimeoutSeconds = localTimeout,
             SttBaseUrl = BaseUrlTextBox.Text.Trim(),
+            CloudProtocol = CloudProtocolTextBox.Text.Trim(),
             Model = ModelTextBox.Text.Trim(),
             Language = LanguageTextBox.Text.Trim(),
             MaxRecordingSeconds = maxSeconds,
             InputDeviceNumber = inputDeviceNumber,
+            AutoSend = AutoSendCheckBox.IsChecked == true,
+            RestoreClipboard = RestoreClipboardCheckBox.IsChecked == true,
             Hotkey = HotkeyTextBox.Text.Trim().ToUpperInvariant()
         };
         await _settingsStore.SaveAsync(Settings);
@@ -71,4 +118,23 @@ public partial class SettingsWindow : Window
         DialogResult = false;
         Close();
     }
+
+    private void SelectBackend(string backend)
+    {
+        var normalized = backend.Trim().ToLowerInvariant();
+        for (var i = 0; i < LocalBackendComboBox.Items.Count; i++)
+        {
+            if (LocalBackendComboBox.Items[i] is ComboBoxItem item
+                && string.Equals(item.Tag?.ToString(), normalized, StringComparison.OrdinalIgnoreCase))
+            {
+                LocalBackendComboBox.SelectedIndex = i;
+                return;
+            }
+        }
+
+        LocalBackendComboBox.SelectedIndex = 0;
+    }
+
+    private string GetSelectedBackend() =>
+        (LocalBackendComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "cpu";
 }

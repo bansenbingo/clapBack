@@ -33,7 +33,12 @@ public sealed class VoiceInputController
 
     public async Task HandleHotkeyAsync(CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (!await _gate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
+        {
+            NotificationRaised?.Invoke(this, "正在处理上一条语音，请稍候");
+            return;
+        }
+
         try
         {
             if (State == ClapBackState.Idle || State == ClapBackState.Success || State == ClapBackState.Error)

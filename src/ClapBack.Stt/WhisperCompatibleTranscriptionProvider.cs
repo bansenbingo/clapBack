@@ -33,6 +33,12 @@ public sealed class WhisperCompatibleTranscriptionProvider : ITranscriptionProvi
         }
 
         var settings = _settings();
+        if (!IsSupportedProtocol(settings.CloudProtocol))
+        {
+            throw new NotSupportedException(
+                $"暂不支持云端识别协议“{settings.CloudProtocol}”，当前支持 WhisperCompatible/OpenAICompatible");
+        }
+
         var apiKey = await _apiKeyProvider(cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(apiKey))
         {
@@ -108,6 +114,11 @@ public sealed class WhisperCompatibleTranscriptionProvider : ITranscriptionProvi
         statusCode == System.Net.HttpStatusCode.RequestTimeout
         || statusCode == System.Net.HttpStatusCode.TooManyRequests
         || (int)statusCode >= 500;
+
+    private static bool IsSupportedProtocol(string protocol) =>
+        string.IsNullOrWhiteSpace(protocol)
+        || string.Equals(protocol, "WhisperCompatible", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(protocol, "OpenAICompatible", StringComparison.OrdinalIgnoreCase);
 
     private static Uri BuildEndpoint(string baseUrl)
     {

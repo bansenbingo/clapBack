@@ -1,4 +1,6 @@
+using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using ClapBack.Core.Abstractions;
 using ClapBack.Core.Models;
 
@@ -10,6 +12,11 @@ public sealed class JsonSettingsStore : ISettingsStore
     {
         WriteIndented = true
     };
+
+    static JsonSettingsStore()
+    {
+        JsonOptions.Converters.Add(new JsonStringEnumConverter());
+    }
 
     private readonly string _path = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),

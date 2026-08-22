@@ -1,3 +1,4 @@
+using System.IO;
 using ClapBack.Core.Abstractions;
 using ClapBack.Core.Models;
 using NAudio.Wave;
@@ -89,7 +90,7 @@ public sealed class WavAudioRecorder : IAudioRecorder
         {
             try
             {
-                using var audio = await completion.WaitAsync(cancellationToken).ConfigureAwait(false);
+                await completion.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch
             {

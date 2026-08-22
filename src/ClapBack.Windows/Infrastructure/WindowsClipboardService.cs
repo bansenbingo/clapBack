@@ -1,4 +1,6 @@
 using System.Windows;
+using Application = System.Windows.Application;
+using Clipboard = System.Windows.Clipboard;
 
 namespace ClapBack.Windows.Infrastructure;
 

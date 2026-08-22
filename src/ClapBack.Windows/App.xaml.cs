@@ -10,7 +10,7 @@ using Forms = System.Windows.Forms;
 
 namespace ClapBack.Windows;
 
-public partial class App : Application
+public partial class App : System.Windows.Application
 {
     private readonly JsonSettingsStore _settingsStore = new();
     private readonly WindowsCredentialStore _credentialStore = new();
@@ -33,10 +33,12 @@ public partial class App : Application
             new WindowsClipboardService(),
             () => ParseVirtualKey(_settings.ChatOpenKey),
             () => _settings.RestoreClipboard);
-        var provider = new WhisperCompatibleTranscriptionProvider(
+        var cloudProvider = new WhisperCompatibleTranscriptionProvider(
             new HttpClient { Timeout = TimeSpan.FromSeconds(45) },
             () => _settings,
             cancellationToken => _credentialStore.GetAsync("ClapBack.Stt.ApiKey", cancellationToken));
+        var localProvider = new LocalSenseVoiceTranscriptionProvider(() => _settings);
+        var provider = new CompositeTranscriptionProvider(localProvider, cloudProvider, () => _settings);
 
         _controller = new VoiceInputController(recorder, provider, sender, () => _settings);
         _controller.StateChanged += ControllerOnStateChanged;
@@ -56,7 +58,7 @@ public partial class App : Application
         {
             Icon = SystemIcons.Application,
             Visible = true,
-            Text = "ClapBack：按 F13 开始录音",
+            Text = $"ClapBack：按 {_settings.Hotkey} 开始录音",
             ContextMenuStrip = menu
         };
         _notifyIcon.DoubleClick += (_, _) => OpenSettings();
@@ -66,11 +68,11 @@ public partial class App : Application
     {
         var text = state switch
         {
-            ClapBackState.Recording => "ClapBack：录音中，再按 F13",
+            ClapBackState.Recording => $"ClapBack：录音中，再按 {_settings.Hotkey}",
             ClapBackState.Transcribing => "ClapBack：识别中",
             ClapBackState.Sending => "ClapBack：发送中",
             ClapBackState.Error => "ClapBack：发生错误",
-            _ => "ClapBack：按 F13 开始录音"
+            _ => $"ClapBack：按 {_settings.Hotkey} 开始录音"
         };
         Dispatcher.Invoke(() =>
         {
@@ -114,6 +116,11 @@ public partial class App : Application
 
     private static ushort ParseVirtualKey(string key)
     {
+        if (key.Equals("CapsLock", StringComparison.OrdinalIgnoreCase))
+        {
+            return 0x14;
+        }
+
         if (key.Equals("Enter", StringComparison.OrdinalIgnoreCase))
         {
             return 0x0D;
@@ -123,6 +130,6 @@ public partial class App : Application
                && ushort.TryParse(key[1..], out var functionNumber)
                && functionNumber is >= 1 and <= 24
             ? (ushort)(0x70 + functionNumber - 1)
-            : 0x0D;
+            : (ushort)0x0D;
     }
 }

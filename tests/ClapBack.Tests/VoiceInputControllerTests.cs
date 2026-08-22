@@ -1,6 +1,7 @@
 using ClapBack.Core.Abstractions;
 using ClapBack.Core.Controller;
 using ClapBack.Core.Models;
+using ClapBack.Stt;
 using Xunit;
 
 namespace ClapBack.Tests;
@@ -40,6 +41,41 @@ public sealed class VoiceInputControllerTests
         Assert.Null(sender.LastText);
         Assert.Equal(ClapBackState.Idle, controller.State);
         Assert.Contains("没有识别到有效语音", controller.LastError ?? string.Empty);
+    }
+
+    [Fact]
+    public async Task LocalOnlyModeDoesNotInvokeCloudProvider()
+    {
+        var local = new CountingProvider(new TranscriptResult("本地结果"));
+        var cloud = new CountingProvider(new TranscriptResult("云端结果"));
+        var provider = new CompositeTranscriptionProvider(
+            local,
+            cloud,
+            () => new ClapBackSettings { TranscriptionMode = TranscriptionMode.LocalOnly });
+
+        await using var audio = new MemoryStream(new byte[] { 1, 2, 3 });
+        var result = await provider.TranscribeAsync(audio, new TranscriptionOptions("glm-asr-2512", "zh"));
+
+        Assert.Equal("本地结果", result.Text);
+        Assert.Equal(1, local.CallCount);
+        Assert.Equal(0, cloud.CallCount);
+    }
+
+    [Fact]
+    public async Task LocalFirstModeRewindsAudioBeforeCloudFallback()
+    {
+        var local = new ThrowingProvider(new InvalidOperationException("本地模型不可用"));
+        var cloud = new RecordingProvider(new TranscriptResult("云端结果"));
+        var provider = new CompositeTranscriptionProvider(
+            local,
+            cloud,
+            () => new ClapBackSettings { TranscriptionMode = TranscriptionMode.LocalFirst });
+
+        await using var audio = new MemoryStream(new byte[] { 1, 2, 3 });
+        var result = await provider.TranscribeAsync(audio, new TranscriptionOptions("glm-asr-2512", "zh"));
+
+        Assert.Equal("云端结果", result.Text);
+        Assert.Equal(new byte[] { 1, 2, 3 }, cloud.AudioBytes);
     }
 
     private sealed class FakeRecorder : IAudioRecorder
@@ -82,6 +118,45 @@ public sealed class VoiceInputControllerTests
         {
             LastText = text;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class CountingProvider(TranscriptResult result) : ITranscriptionProvider
+    {
+        public int CallCount { get; private set; }
+
+        public Task<TranscriptResult> TranscribeAsync(
+            Stream audio,
+            TranscriptionOptions options,
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            return Task.FromResult(result);
+        }
+    }
+
+    private sealed class ThrowingProvider(Exception exception) : ITranscriptionProvider
+    {
+        public Task<TranscriptResult> TranscribeAsync(
+            Stream audio,
+            TranscriptionOptions options,
+            CancellationToken cancellationToken = default) =>
+            Task.FromException<TranscriptResult>(exception);
+    }
+
+    private sealed class RecordingProvider(TranscriptResult result) : ITranscriptionProvider
+    {
+        public byte[]? AudioBytes { get; private set; }
+
+        public async Task<TranscriptResult> TranscribeAsync(
+            Stream audio,
+            TranscriptionOptions options,
+            CancellationToken cancellationToken = default)
+        {
+            using var copy = new MemoryStream();
+            await audio.CopyToAsync(copy, cancellationToken);
+            AudioBytes = copy.ToArray();
+            return result;
         }
     }
 }
