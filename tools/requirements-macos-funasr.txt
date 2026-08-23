@@ -1,0 +1,7 @@
+# macOS ARM64 experiment: FunASR + ModelScope SenseVoiceSmall inference.
+funasr==1.4.3
+modelscope==1.39.1
+torch==2.9.1
+torchaudio==2.9.1
+soundfile==0.14.0
+sounddevice>=0.5.1

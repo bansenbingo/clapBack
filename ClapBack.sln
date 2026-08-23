@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -9,6 +9,12 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClapBack.Windows", "src\ClapBack.Windows\ClapBack.Windows.csproj", "{C7D7DC1E-AD26-46BC-9EE3-C08D7E9CAD9F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClapBack.Tests", "tests\ClapBack.Tests\ClapBack.Tests.csproj", "{D8E8ED2F-BE37-47CD-AFF4-D19E8FADAE10}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClapBack.MacExperiment", "src\ClapBack.MacExperiment\ClapBack.MacExperiment.csproj", "{E9F9FE30-CF48-48DE-B0F5-E2A9F0BEAF21}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{6BB82B19-E1FC-4E15-91EE-CA39AAB79995}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClapBack.Desktop", "src\ClapBack.Desktop\ClapBack.Desktop.csproj", "{C2CC0DA7-9B89-4994-8C4C-0750998CCDAD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -32,5 +38,16 @@ Global
 		{D8E8ED2F-BE37-47CD-AFF4-D19E8FADAE10}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D8E8ED2F-BE37-47CD-AFF4-D19E8FADAE10}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D8E8ED2F-BE37-47CD-AFF4-D19E8FADAE10}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E9F9FE30-CF48-48DE-B0F5-E2A9F0BEAF21}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E9F9FE30-CF48-48DE-B0F5-E2A9F0BEAF21}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E9F9FE30-CF48-48DE-B0F5-E2A9F0BEAF21}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E9F9FE30-CF48-48DE-B0F5-E2A9F0BEAF21}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C2CC0DA7-9B89-4994-8C4C-0750998CCDAD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C2CC0DA7-9B89-4994-8C4C-0750998CCDAD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C2CC0DA7-9B89-4994-8C4C-0750998CCDAD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C2CC0DA7-9B89-4994-8C4C-0750998CCDAD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{C2CC0DA7-9B89-4994-8C4C-0750998CCDAD} = {6BB82B19-E1FC-4E15-91EE-CA39AAB79995}
 	EndGlobalSection
 EndGlobal

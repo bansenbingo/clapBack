@@ -38,6 +38,14 @@ public sealed record ClapBackSettings
     public int LocalSttThreads { get; init; } = 2;
     public int LocalSttTimeoutSeconds { get; init; } = 20;
 
+    // macOS experiment settings. The Python adapter is intentionally separate
+    // from the Windows WPF runtime and uses FunASR's ModelScope hub directly.
+    public string MacOsPythonPath { get; init; } = ".venv-funasr/bin/python";
+    public string MacOsFunAsrScriptPath { get; init; } = "tools/macos_funasr_transcribe.py";
+    public string MacOsFunAsrModel { get; init; } = "iic/SenseVoiceSmall";
+    public string MacOsFunAsrDevice { get; init; } = "auto";
+    public int MacOsSttTimeoutSeconds { get; init; } = 300;
+
     // Cloud settings are retained for an optional provider or explicit fallback.
     public string Model { get; init; } = "glm-asr-2512";
     public string SttBaseUrl { get; init; } = "https://api.openai.com/v1";

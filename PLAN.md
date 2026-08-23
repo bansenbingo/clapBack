@@ -16,6 +16,10 @@ ClapBack 首版定位为 Windows 10/11 的守望先锋专用托盘程序：
 - 已实现本地 SenseVoiceSmall GGUF 的 Windows 子进程适配：模型/运行时/VAD 路径、SHA-256 校验、CPU/Vulkan/CUDA 后端、临时音频清理、超时、取消和低优先级启动。
 - 已实现本地模型首次使用时从 Hugging Face `FunAudioLLM/SenseVoiceSmall-GGUF` 下载 `sensevoice-small-q8.gguf`；模型缓存位于被 Git 忽略的 `models/` 目录，支持取消、临时文件和原子替换。
 - 已实现 Hugging Face 下载超时/网络失败后自动回退 ModelScope；模型目录新增 `Fun-ASR-Nano-2512` 和中文 `Paraformer` 选项。Paraformer 提供两边的 GGUF Q8 文件；Fun-ASR 的 ModelScope 官方回退是 `model.pt`，需 FunASR/PyTorch 运行时，当前 llama.cpp 适配器会明确拒绝不兼容格式。
+- 已增加 macOS 实验适配：使用项目专用 `.venv-funasr` 安装 FunASR/ModelScope，通过 `iic/SenseVoiceSmall` 完成 WAV 单次识别；新增 `ClapBack.MacExperiment` 的 .NET 8 入口，Windows WPF 主链路不变。
+- 已增加 `ClapBack.Desktop` Avalonia UI 跨平台 GUI：Windows/macOS 共用一套 .NET 8 XAML 界面，支持音频文件选择、本地识别、结果复制和设置持久化；macOS 选择 FunASR Python 适配器，Windows 选择现有 GGUF 适配器。
+- macOS GUI 已接入麦克风录音：通过 `sounddevice`/PortAudio 采集 16 kHz 单声道 WAV，再交给 `MacOsFunAsrTranscriptionProvider` 调用 ModelScope `iic/SenseVoiceSmall`；录音权限和依赖安装步骤已写入 README。
+- 已增加 macOS `.app` 打包：`scripts/build-macos-app.sh` 发布自包含 .NET 8/Avalonia bundle，生成 `dist/ClapBack.app`，支持 Finder 双击启动；路径解析兼容 Finder 启动时的非项目工作目录。
 - 已实现本地、云端和本地失败后云端回退的统一选择层；默认配置为仅本地，避免未明确同意时上传录音。
 - 云端层目前继续使用现有 Whisper 兼容 multipart `/audio/transcriptions` 形状；`glm-asr-2512` 已可作为模型 ID 配置，但其供应商专用 API 路径、鉴权和请求格式尚未在线验证，不能宣称 GLM 云端直连已完成。
 - 当前 `IAudioRecorder` 仍在停止录音后提交完整 WAV，识别运行时按单次命令执行；常驻模型进程和录音期间的增量/部分结果尚未完成，不能宣称已经实现 800ms 首字延迟。
@@ -33,6 +37,12 @@ ClapBack 首版定位为 Windows 10/11 的守望先锋专用托盘程序：
   - 使用 NAudio/WASAPI 采集 16 kHz、单声道 PCM 音频。
   - 使用 Windows Clipboard API 保存、粘贴并尽量恢复用户原剪贴板。
   - 使用标准 Windows 输入模拟打开聊天框、粘贴和回车，不读取游戏内存、不注入 DLL。
+- `ClapBack.Desktop`
+  - 基于 Avalonia 11 FluentTheme 的 Windows/macOS 共用桌面窗口。
+  - 通过 `StorageProvider` 选择 PCM WAV 音频并显示识别结果；其他格式转换列为后续工作。
+  - macOS 通过 Python 录音 sidecar 完成开始/停止录音，录音结果在内存中交给 FunASR，不保留临时音频。
+  - 通过系统剪贴板复制结果，配置写入用户应用数据目录，不与 Windows WPF 设置文件混用。
+  - 当前是跨平台识别实验入口；录音、全局热键和游戏聊天发送继续由 Windows WPF 链路负责，后续再抽象为跨平台服务。
 - `ClapBack.Stt`
   - 定义供应商抽象：
     ```csharp

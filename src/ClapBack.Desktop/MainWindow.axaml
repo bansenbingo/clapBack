@@ -1,0 +1,86 @@
+<Window
+    x:Class="ClapBack.Desktop.MainWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="ClapBack"
+    Width="1040"
+    Height="700"
+    MinWidth="900"
+    MinHeight="600"
+    Background="#F5F5F7"
+    WindowStartupLocation="CenterScreen">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="34,28,34,24">
+        <StackPanel Grid.Row="0" Spacing="5" Margin="0,0,0,26">
+            <TextBlock Text="ClapBack" FontSize="32" FontWeight="Bold" Foreground="#111827" />
+            <TextBlock Text="跨平台本地语音转文字实验台" FontSize="15" Foreground="#6B7280" />
+        </StackPanel>
+
+        <Grid Grid.Row="1" ColumnDefinitions="1.25*,0.75*" ColumnSpacing="22">
+            <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="18" Padding="26">
+                <Grid RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="16">
+                    <TextBlock Grid.Row="0" Text="识别工作区" FontSize="20" FontWeight="SemiBold" Foreground="#111827" />
+
+                    <Border Grid.Row="1" Background="#EEF4FF" BorderBrush="#D8E7FF" BorderThickness="1" CornerRadius="14" Padding="18,15">
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="当前状态" FontSize="13" Foreground="#5B6B84" />
+                            <TextBlock x:Name="StatusText" Text="等待选择音频" FontSize="22" FontWeight="SemiBold" Foreground="#1D4ED8" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Grid Grid.Row="2" RowDefinitions="Auto,*" RowSpacing="9">
+                        <TextBlock Grid.Row="0" Text="识别结果" FontSize="13" Foreground="#6B7280" />
+                        <Border Grid.Row="1" Background="#FAFAFB" BorderBrush="#ECEEF2" BorderThickness="1" CornerRadius="12" Padding="16">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <TextBlock x:Name="TranscriptText" Text="选择一个 WAV 文件开始本地识别。" TextWrapping="Wrap" FontSize="17" Foreground="#1F2937" />
+                            </ScrollViewer>
+                        </Border>
+                    </Grid>
+
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10">
+                        <Button x:Name="RecordButton" Content="开始录音" Click="RecordClick" Padding="18,11" Background="#007AFF" Foreground="White" BorderBrush="#007AFF" BorderThickness="1" CornerRadius="9" />
+                        <Button x:Name="ChooseAudioButton" Content="选择音频并识别" Click="ChooseAudioClick" Padding="18,11" Background="#EEF2F7" Foreground="#1F2937" BorderBrush="#D9E0E8" BorderThickness="1" CornerRadius="9" />
+                        <Button x:Name="CopyButton" Content="复制结果" Click="CopyClick" Padding="18,11" Background="#EEF2F7" Foreground="#1F2937" BorderBrush="#D9E0E8" BorderThickness="1" CornerRadius="9" IsEnabled="False" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="4" x:Name="RecordHintText" Text="macOS：点击开始录音，完成后点击停止并识别。首次使用需要允许麦克风权限。" Foreground="#6B7280" TextWrapping="Wrap" FontSize="12" />
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="18" Padding="26">
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto" RowSpacing="12">
+                    <TextBlock Grid.Row="0" Text="设置" FontSize="20" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,4" />
+
+                    <TextBlock Grid.Row="1" Text="识别模式" FontSize="13" Foreground="#6B7280" />
+                    <ComboBox Grid.Row="2" x:Name="ModeComboBox" SelectedIndex="0" HorizontalContentAlignment="Left" Padding="10,7" Background="#FFFFFF" Foreground="#1F2937" BorderBrush="#D1D5DB">
+                        <ComboBoxItem Content="本地优先" Tag="LocalFirst" />
+                        <ComboBoxItem Content="仅本地" Tag="LocalOnly" />
+                        <ComboBoxItem Content="仅云端" Tag="CloudOnly" />
+                    </ComboBox>
+
+                    <TextBlock Grid.Row="3" Text="本地模型" FontSize="13" Foreground="#6B7280" />
+                    <ComboBox Grid.Row="4" x:Name="ModelComboBox" SelectedIndex="0" HorizontalContentAlignment="Left" Padding="10,7" Background="#FFFFFF" Foreground="#1F2937" BorderBrush="#D1D5DB">
+                        <ComboBoxItem Content="SenseVoiceSmall" Tag="SenseVoiceSmall" />
+                        <ComboBoxItem Content="Fun-ASR-Nano-2512" Tag="FunAsrNano2512" />
+                        <ComboBoxItem Content="Paraformer 中文" Tag="ParaformerZh" />
+                    </ComboBox>
+
+                    <TextBlock Grid.Row="5" Text="macOS Python 环境" FontSize="13" Foreground="#6B7280" />
+                    <TextBox Grid.Row="6" x:Name="PythonPathTextBox" Watermark=".venv-funasr/bin/python" Padding="10,8" Background="#FFFFFF" Foreground="#1F2937" BorderBrush="#D1D5DB" />
+
+                    <Grid Grid.Row="7" RowDefinitions="Auto,Auto,Auto" RowSpacing="12" VerticalAlignment="Top">
+                        <TextBlock Grid.Row="0" Text="热键" FontSize="13" Foreground="#6B7280" />
+                        <TextBox Grid.Row="1" x:Name="HotkeyTextBox" Watermark="CapsLock" Padding="10,8" Background="#FFFFFF" Foreground="#1F2937" BorderBrush="#D1D5DB" />
+                        <CheckBox Grid.Row="2" x:Name="AutoSendCheckBox" Content="识别后自动发送" IsChecked="True" Foreground="#1F2937" />
+                    </Grid>
+
+                    <StackPanel Grid.Row="8" Spacing="12">
+                        <Button Content="保存设置" Click="SaveSettingsClick" HorizontalAlignment="Left" Padding="20,10" Background="#111827" Foreground="White" BorderBrush="#111827" BorderThickness="1" CornerRadius="9" />
+                        <TextBlock Text="macOS 当前支持文件识别与麦克风录音；Windows 继续使用现有 WPF/全局热键链路。" Foreground="#6B7280" TextWrapping="Wrap" FontSize="12" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <TextBlock Grid.Row="2" x:Name="FooterText" Text="本地识别不会上传音频" Foreground="#8A9099" FontSize="12" Margin="0,18,0,0" />
+    </Grid>
+</Window>
