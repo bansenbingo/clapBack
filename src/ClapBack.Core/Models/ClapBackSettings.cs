@@ -43,7 +43,9 @@ public sealed record ClapBackSettings
     public string MacOsPythonPath { get; init; } = ".venv-funasr/bin/python";
     public string MacOsFunAsrScriptPath { get; init; } = "tools/macos_funasr_transcribe.py";
     public string MacOsFunAsrModel { get; init; } = "iic/SenseVoiceSmall";
-    public string MacOsFunAsrDevice { get; init; } = "auto";
+    // CPU is the stable default on macOS; MPS can be enabled explicitly after
+    // validating the local PyTorch build and model output.
+    public string MacOsFunAsrDevice { get; init; } = "cpu";
     public int MacOsSttTimeoutSeconds { get; init; } = 300;
 
     // Cloud settings are retained for an optional provider or explicit fallback.

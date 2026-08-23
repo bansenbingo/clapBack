@@ -17,7 +17,36 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-seconds", type=float, default=30.0)
     parser.add_argument("--sample-rate", type=int, default=16_000)
     parser.add_argument("--channels", type=int, default=1)
+    parser.add_argument("--device", type=int, default=None, help="sounddevice input device index")
     return parser.parse_args()
+
+
+def select_input_device(sd: object, requested: int | None) -> int | None:
+    if requested is not None:
+        return requested
+
+    # Do not trust the system default: game/streaming software can make a
+    # virtual speaker the default input. Prefer the built-in microphone and
+    # avoid known virtual routing devices.
+    try:
+        devices = sd.query_devices()  # type: ignore[attr-defined]
+    except Exception:
+        return None
+
+    preferred = ("麦克风", "microphone", "built-in", "内置", "macbook", "airpods")
+    excluded = ("steam", "streaming", "blackhole", "loopback", "aggregate")
+    candidates: list[tuple[int, int]] = []
+    for index, device in enumerate(devices):
+        if int(device.get("max_input_channels", 0)) <= 0:
+            continue
+        name = str(device.get("name", "")).lower()
+        if any(token in name for token in excluded):
+            continue
+        score = 100 if any(token in name for token in preferred) else 10
+        candidates.append((score, index))
+    if not candidates:
+        return None
+    return max(candidates)[1]
 
 
 def main() -> int:
@@ -50,8 +79,13 @@ def main() -> int:
             print(str(status), file=sys.stderr, flush=True)
         chunks.append(indata.copy())
 
+    input_device = select_input_device(sd, args.device)
+    if input_device is not None:
+        print(json.dumps({"status": "device", "index": input_device}), file=sys.stderr, flush=True)
+
     try:
         with sd.InputStream(
+            device=input_device,
             samplerate=args.sample_rate,
             channels=args.channels,
             dtype="int16",

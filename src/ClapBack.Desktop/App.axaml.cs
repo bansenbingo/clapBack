@@ -39,6 +39,15 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow(this);
+            desktop.Exit += (_, _) =>
+            {
+                if (AudioRecorder is not null)
+                {
+                    AudioRecorder.CancelAsync().GetAwaiter().GetResult();
+                }
+
+                (TranscriptionProvider as IDisposable)?.Dispose();
+            };
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -49,4 +58,5 @@ public partial class App : Application
         Settings = settings;
         DesktopSettingsStore.Save(settings);
     }
+
 }

@@ -20,6 +20,7 @@ ClapBack 首版定位为 Windows 10/11 的守望先锋专用托盘程序：
 - 已增加 `ClapBack.Desktop` Avalonia UI 跨平台 GUI：Windows/macOS 共用一套 .NET 8 XAML 界面，支持音频文件选择、本地识别、结果复制和设置持久化；macOS 选择 FunASR Python 适配器，Windows 选择现有 GGUF 适配器。
 - macOS GUI 已接入麦克风录音：通过 `sounddevice`/PortAudio 采集 16 kHz 单声道 WAV，再交给 `MacOsFunAsrTranscriptionProvider` 调用 ModelScope `iic/SenseVoiceSmall`；录音权限和依赖安装步骤已写入 README。
 - 已增加 macOS `.app` 打包：`scripts/build-macos-app.sh` 发布自包含 .NET 8/Avalonia bundle，生成 `dist/ClapBack.app`，支持 Finder 双击启动；路径解析兼容 Finder 启动时的非项目工作目录。
+- 已修复 macOS 识别质量与速度问题：录音 sidecar 自动避开 Steam/BlackHole 等虚拟输入并优先 MacBook 内置麦克风；FunASR 改为常驻 JSON sidecar，模型只在首次识别时加载，默认 CPU 以保证输出稳定。
 - 已实现本地、云端和本地失败后云端回退的统一选择层；默认配置为仅本地，避免未明确同意时上传录音。
 - 云端层目前继续使用现有 Whisper 兼容 multipart `/audio/transcriptions` 形状；`glm-asr-2512` 已可作为模型 ID 配置，但其供应商专用 API 路径、鉴权和请求格式尚未在线验证，不能宣称 GLM 云端直连已完成。
 - 当前 `IAudioRecorder` 仍在停止录音后提交完整 WAV，识别运行时按单次命令执行；常驻模型进程和录音期间的增量/部分结果尚未完成，不能宣称已经实现 800ms 首字延迟。

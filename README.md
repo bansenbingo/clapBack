@@ -50,6 +50,10 @@ DOTNET_ROOT=/usr/local/share/dotnet /usr/local/share/dotnet/dotnet run \
 
 首次点击“开始录音”时，macOS 会请求麦克风权限；请在“系统设置 → 隐私与安全性 → 麦克风”中允许终端或 ClapBack。录音进程达到设置中的最长时长后会自动停止，默认 30 秒。
 
+macOS 录音会自动优先选择 MacBook 内置麦克风，并避开 Steam Streaming、BlackHole 等虚拟音频设备。FunASR 模型会在第一次识别时加载到常驻 sidecar，后续识别复用同一模型，避免每次重新加载约 936 MB 权重。默认使用 CPU 以保证 SenseVoice 输出稳定；确认本机 PyTorch/MPS 结果正确后，可在设置文件中将 `MacOsFunAsrDevice` 改为 `mps`。
+
+如果识别结果异常（例如只输出单个字符或韩文 token），请先检查“系统设置 → 隐私与安全性 → 麦克风”权限，并确认没有把 Steam/虚拟音频设备设为唯一输入设备；应用会在录音启动时自动选择真实麦克风。
+
 当前本地识别适配器会在停止录音后启动 FunASR llama.cpp 子进程完成一次 SenseVoiceSmall 推理，并支持模型校验、超时、取消和本地/云端模式选择。录音期间的增量转写和常驻模型进程仍是后续工作；当前不能把它描述为完整流式识别。
 
 ## Windows 构建
