@@ -10,6 +10,14 @@ import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
+PROTOCOL_PREFIX = "CLAPBACK_JSON:"
+
+
+def emit(payload: object) -> None:
+    # FunASR/tqdm may write progress text to stdout on some versions. A
+    # prefix makes the machine-readable sidecar protocol unambiguous.
+    print(PROTOCOL_PREFIX + json.dumps(payload, ensure_ascii=False), flush=True)
+
 
 def extract_text(result: object) -> str:
     if isinstance(result, list):
@@ -35,7 +43,7 @@ def main() -> int:
         import torch
         from funasr import AutoModel
     except ImportError as exc:
-        print(json.dumps({"ready": False, "error": str(exc)}, ensure_ascii=False), flush=True)
+        emit({"ready": False, "error": str(exc)})
         return 3
 
     device = args.device
@@ -50,10 +58,10 @@ def main() -> int:
         with redirect_stdout(sys.stderr):
             model = AutoModel(model=args.model, hub="ms", device=device, disable_update=True)
     except Exception as exc:
-        print(json.dumps({"ready": False, "error": str(exc)}, ensure_ascii=False), flush=True)
+        emit({"ready": False, "error": str(exc)})
         return 4
 
-    print(json.dumps({"ready": True, "device": device}), flush=True)
+    emit({"ready": True, "device": device})
     for line in sys.stdin:
         try:
             request = json.loads(line)
@@ -67,9 +75,9 @@ def main() -> int:
                     use_itn=True,
                     batch_size_s=60,
                 )
-            print(json.dumps({"ok": True, "text": extract_text(result)}, ensure_ascii=False), flush=True)
+            emit({"ok": True, "text": extract_text(result)})
         except Exception as exc:
-            print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), flush=True)
+            emit({"ok": False, "error": str(exc)})
     return 0
 
 

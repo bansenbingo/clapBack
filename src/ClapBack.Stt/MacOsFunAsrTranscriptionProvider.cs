@@ -13,6 +13,12 @@ namespace ClapBack.Stt;
 /// </summary>
 public sealed class MacOsFunAsrTranscriptionProvider : ITranscriptionProvider, IDisposable
 {
+    private const string ProtocolPrefix = "CLAPBACK_JSON:";
+    private static readonly JsonSerializerOptions ProtocolJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
     private readonly Func<ClapBackSettings> _settings;
     private readonly SemaphoreSlim _requestLock = new(1, 1);
     private readonly object _processSync = new();
@@ -65,19 +71,15 @@ public sealed class MacOsFunAsrTranscriptionProvider : ITranscriptionProvider, I
                 await EnsureServerAsync(pythonPath, scriptPath, settings, cancellationToken).ConfigureAwait(false);
                 var request = JsonSerializer.Serialize(new ServerRequest(
                     audioPath,
-                    string.IsNullOrWhiteSpace(options.Language) ? "zh" : options.Language));
+                    string.IsNullOrWhiteSpace(options.Language) ? "zh" : options.Language),
+                    ProtocolJsonOptions);
                 await _input!.WriteLineAsync(request).WaitAsync(cancellationToken).ConfigureAwait(false);
                 await _input.FlushAsync(cancellationToken).ConfigureAwait(false);
 
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(settings.MacOsSttTimeoutSeconds, 1, 1800)));
-                var responseLine = await _output!.ReadLineAsync(timeout.Token).ConfigureAwait(false);
-                if (string.IsNullOrWhiteSpace(responseLine))
-                {
-                    throw new InvalidOperationException("macOS FunASR 服务意外退出");
-                }
-
-                var response = JsonSerializer.Deserialize<ServerResponse>(responseLine);
+                var responseLine = await ReadProtocolLineAsync(_output!, timeout.Token).ConfigureAwait(false);
+                var response = JsonSerializer.Deserialize<ServerResponse>(responseLine, ProtocolJsonOptions);
                 if (response is null || !response.Ok)
                 {
                     throw new InvalidOperationException($"macOS FunASR 识别失败：{Sanitize(response?.Error ?? "未知错误")}");
@@ -152,15 +154,18 @@ public sealed class MacOsFunAsrTranscriptionProvider : ITranscriptionProvider, I
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(settings.MacOsSttTimeoutSeconds, 10, 1800)));
-        var readyLine = await _output.ReadLineAsync(timeout.Token).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(readyLine))
+        string readyLine;
+        try
+        {
+            readyLine = await ReadProtocolLineAsync(_output, timeout.Token).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException)
         {
             var error = _standardErrorTask is null ? string.Empty : await _standardErrorTask.ConfigureAwait(false);
             StopServer();
             throw new InvalidOperationException($"FunASR 模型加载失败：{Sanitize(error)}");
         }
-
-        var ready = JsonSerializer.Deserialize<ReadyResponse>(readyLine);
+        var ready = JsonSerializer.Deserialize<ReadyResponse>(readyLine, ProtocolJsonOptions);
         if (ready?.Ready != true)
         {
             StopServer();
@@ -214,6 +219,44 @@ public sealed class MacOsFunAsrTranscriptionProvider : ITranscriptionProvider, I
 
     private static string Sanitize(string value) =>
         value.Length <= 1000 ? value : value[..1000] + "…";
+
+    private static async Task<string> ReadProtocolLineAsync(
+        StreamReader reader,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+            if (line is null)
+            {
+                throw new InvalidOperationException("macOS FunASR 服务意外退出");
+            }
+
+            var marker = line.IndexOf(ProtocolPrefix, StringComparison.Ordinal);
+            if (marker < 0)
+            {
+                // Ignore tqdm/model diagnostics accidentally written to stdout.
+                continue;
+            }
+
+            var json = line[(marker + ProtocolPrefix.Length)..].Trim();
+            if (json.Length == 0)
+            {
+                continue;
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                return document.RootElement.GetRawText();
+            }
+            catch (JsonException)
+            {
+                // A partial progress line can contain the prefix; keep waiting
+                // for the complete protocol message.
+            }
+        }
+    }
 
     private static void TryDelete(string path)
     {
