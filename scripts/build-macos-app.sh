@@ -25,10 +25,12 @@ mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
 # directory. Keeping the native Avalonia libraries beside the host executable
 # makes the .app launchable by Finder without a shell or a PATH configuration.
 cp -R "$publish_dir/." "$app_dir/Contents/MacOS/"
+rm -f "$app_dir/Contents/MacOS/ClapBack.icns"
 if [[ -f "$app_dir/Contents/MacOS/ClapBack.Desktop" ]]; then
   mv -f "$app_dir/Contents/MacOS/ClapBack.Desktop" "$app_dir/Contents/MacOS/ClapBack"
 fi
 cp "$repo_root/packaging/macos/Info.plist" "$app_dir/Contents/Info.plist"
+cp "$repo_root/packaging/macos/ClapBack.icns" "$app_dir/Contents/Resources/ClapBack.icns"
 chmod +x "$app_dir/Contents/MacOS/ClapBack"
 
 echo

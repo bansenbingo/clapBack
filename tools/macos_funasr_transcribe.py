@@ -80,13 +80,14 @@ def main() -> int:
             hub="ms",
             device=device,
             disable_update=True,
+            disable_pbar=True,
         )
         result = model.generate(
             input=str(args.audio),
             cache={},
-            language="auto",
+            language="zh",
             use_itn=True,
-            batch_size_s=60,
+            batch_size_s=30,
         )
     text = extract_text(result)
     if args.as_json:

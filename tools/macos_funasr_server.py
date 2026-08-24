@@ -13,6 +13,23 @@ from pathlib import Path
 PROTOCOL_PREFIX = "CLAPBACK_JSON:"
 
 
+def normalize_language(value: object) -> str:
+    language = str(value or "zh").strip().lower()
+    aliases = {
+        "中文": "zh",
+        "chinese": "zh",
+        "zh-cn": "zh",
+        "zh-tw": "zh",
+        "普通话": "zh",
+        "粤语": "yue",
+        "cantonese": "yue",
+        "english": "en",
+        "japanese": "ja",
+        "korean": "ko",
+    }
+    return aliases.get(language, language if language in {"auto", "zh", "yue", "en", "ja", "ko"} else "zh")
+
+
 def emit(payload: object) -> None:
     # FunASR/tqdm may write progress text to stdout on some versions. A
     # prefix makes the machine-readable sidecar protocol unambiguous.
@@ -56,7 +73,13 @@ def main() -> int:
     print(f"loading SenseVoiceSmall device={device}", file=sys.stderr, flush=True)
     try:
         with redirect_stdout(sys.stderr):
-            model = AutoModel(model=args.model, hub="ms", device=device, disable_update=True)
+            model = AutoModel(
+                model=args.model,
+                hub="ms",
+                device=device,
+                disable_update=True,
+                disable_pbar=True,
+            )
     except Exception as exc:
         emit({"ready": False, "error": str(exc)})
         return 4
@@ -66,14 +89,14 @@ def main() -> int:
         try:
             request = json.loads(line)
             audio = Path(str(request["audio"]))
-            language = str(request.get("language", "zh"))
+            language = normalize_language(request.get("language", "zh"))
             with redirect_stdout(sys.stderr):
                 result = model.generate(
                     input=str(audio),
                     cache={},
                     language=language,
                     use_itn=True,
-                    batch_size_s=60,
+                    batch_size_s=30,
                 )
             emit({"ok": True, "text": extract_text(result)})
         except Exception as exc:

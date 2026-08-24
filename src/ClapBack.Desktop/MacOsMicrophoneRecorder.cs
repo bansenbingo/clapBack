@@ -74,6 +74,11 @@ internal sealed class MacOsMicrophoneRecorder : IAudioRecorder
             startInfo.ArgumentList.Add(_audioPath);
             startInfo.ArgumentList.Add("--max-seconds");
             startInfo.ArgumentList.Add(Math.Clamp(settings.MaxRecordingSeconds, 1, 300).ToString());
+            if (settings.InputDeviceNumber > 0)
+            {
+                startInfo.ArgumentList.Add("--device");
+                startInfo.ArgumentList.Add(settings.InputDeviceNumber.ToString());
+            }
 
             var process = new Process { StartInfo = startInfo };
             if (!process.Start())
@@ -125,6 +130,11 @@ internal sealed class MacOsMicrophoneRecorder : IAudioRecorder
             if (bytes.Length < 44)
             {
                 throw new InvalidDataException("录音文件为空或格式无效");
+            }
+
+            if (WavSignalInspector.IsSilent(bytes))
+            {
+                throw new InvalidOperationException("没有采集到有效语音信号，请检查 macOS 麦克风权限、输入设备和系统输入音量");
             }
 
             return new RecordedAudio(new MemoryStream(bytes, writable: false), "clapback-macos.wav");
@@ -235,4 +245,26 @@ internal sealed class MacOsMicrophoneRecorder : IAudioRecorder
 
     private static string Sanitize(string value) =>
         value.Length <= 1000 ? value : value[..1000] + "…";
+
+    private static class WavSignalInspector
+    {
+        public static bool IsSilent(byte[] wav)
+        {
+            const int headerSize = 44;
+            if (wav.Length <= headerSize) return true;
+
+            long sumSquares = 0;
+            var sampleCount = 0;
+            for (var offset = headerSize; offset + 1 < wav.Length; offset += 2)
+            {
+                var sample = (short)(wav[offset] | (wav[offset + 1] << 8));
+                sumSquares += (long)sample * sample;
+                sampleCount++;
+            }
+
+            if (sampleCount == 0) return true;
+            var rms = Math.Sqrt(sumSquares / (double)sampleCount);
+            return rms < 80;
+        }
+    }
 }

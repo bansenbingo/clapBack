@@ -45,7 +45,7 @@ public sealed class MacOsFunAsrTranscriptionProvider : ITranscriptionProvider, I
 
         var settings = _settings();
         var pythonPath = ResolvePath(settings.MacOsPythonPath);
-        var scriptPath = ResolvePath("tools/macos_funasr_server.py");
+        var scriptPath = ResolvePath(settings.MacOsFunAsrScriptPath);
         if (!File.Exists(pythonPath))
         {
             throw new FileNotFoundException("macOS FunASR Python 环境不存在，请先运行 scripts/macos-funasr-setup.sh", pythonPath);
@@ -139,6 +139,7 @@ public sealed class MacOsFunAsrTranscriptionProvider : ITranscriptionProvider, I
             ? "cpu"
             : settings.MacOsFunAsrDevice;
         startInfo.ArgumentList.Add(string.IsNullOrWhiteSpace(device) ? "cpu" : device);
+        startInfo.Environment["PYTHONUNBUFFERED"] = "1";
 
         var process = new Process { StartInfo = startInfo };
         if (!process.Start())
