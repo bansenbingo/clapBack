@@ -2,6 +2,13 @@
   <PropertyGroup>
     <LangVersion>latest</LangVersion>
     <AnalysisLevel>latest</AnalysisLevel>
-    <InvariantGlobalization>true</InvariantGlobalization>
+    <!--
+      不要打开 InvariantGlobalization：WPF 的 DataGrid 在行校验时会调用
+      XmlLanguage.GetSpecificCulture()，去掉 ICU 后该调用抛
+      InvalidOperationException("Cannot find non-neutral culture related to 'en-us'")，
+      结果是打开「字库」标签页直接崩掉整个程序。Windows 10+ 与 macOS 都自带 ICU，
+      因此保持默认（使用系统区域设置）既安全又是中文界面想要的行为。
+    -->
+    <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
 </Project>

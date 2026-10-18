@@ -46,17 +46,24 @@ public sealed class WhisperCompatibleTranscriptionProvider : ITranscriptionProvi
         }
 
         var audioBytes = await ReadAudioAsync(audio, cancellationToken).ConfigureAwait(false);
+
+        // 必须按真实格式声明 Content-Type 与文件名。之前这里硬编码 audio/wav + clapback.wav，
+        // 任何非 WAV 输入都会被云端当成 WAV 解析，轻则识别失败，重则返回乱码文本。
+        var container = Audio.AudioFormatDetector.Detect(audioBytes.AsSpan(0, Math.Min(audioBytes.Length, 32)).ToArray());
+        var mimeType = Audio.AudioMimeType.Resolve(container, null);
+        var uploadName = Audio.AudioMimeType.ResolveFileName(container, null);
+
         for (var attempt = 0; attempt < 2; attempt++)
         {
             using var request = new HttpRequestMessage(
                 HttpMethod.Post,
-                BuildEndpoint(settings.SttBaseUrl));
+                BuildEndpoint(settings.SttBaseUrl, settings.AllowInsecureHttpEndpoint));
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
             using var multipart = new MultipartFormDataContent();
             using var audioContent = new ByteArrayContent(audioBytes);
-            audioContent.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
-            multipart.Add(audioContent, "file", "clapback.wav");
+            audioContent.Headers.ContentType = MediaTypeHeaderValue.Parse(mimeType);
+            multipart.Add(audioContent, "file", uploadName);
             multipart.Add(new StringContent(options.Model, Encoding.UTF8), "model");
             if (!string.IsNullOrWhiteSpace(options.Language))
             {
@@ -120,14 +127,32 @@ public sealed class WhisperCompatibleTranscriptionProvider : ITranscriptionProvi
         || string.Equals(protocol, "WhisperCompatible", StringComparison.OrdinalIgnoreCase)
         || string.Equals(protocol, "OpenAICompatible", StringComparison.OrdinalIgnoreCase);
 
-    private static Uri BuildEndpoint(string baseUrl)
+    /// <summary>
+    /// 构造识别端点。<b>默认强制 https</b>：音频与 Bearer API Key 一旦走明文 http 就会被中间人完整看到。
+    /// 只有两种情况允许 http：端点是本机回环地址（本地网关/自测），
+    /// 或用户在设置里显式打开 <c>AllowInsecureHttpEndpoint</c>（自行承担明文外发风险）。
+    /// </summary>
+    internal static Uri BuildEndpoint(string baseUrl, bool allowInsecureHttp = false)
     {
-        if (!Uri.TryCreate(baseUrl.TrimEnd('/') + "/audio/transcriptions", UriKind.Absolute, out var endpoint))
+        if (string.IsNullOrWhiteSpace(baseUrl) ||
+            !Uri.TryCreate(baseUrl.TrimEnd('/') + "/audio/transcriptions", UriKind.Absolute, out var endpoint))
         {
             throw new InvalidOperationException("语音识别服务 URL 无效");
         }
 
-        return endpoint;
+        if (endpoint.Scheme == Uri.UriSchemeHttps || endpoint.IsLoopback)
+        {
+            return endpoint;
+        }
+
+        if (allowInsecureHttp)
+        {
+            return endpoint;
+        }
+
+        throw new InvalidOperationException(
+            $"语音识别服务必须使用 https://（当前为 {endpoint.Scheme}://）。" +
+            "若确实需要明文上传音频与 API Key，请在设置中显式开启 AllowInsecureHttpEndpoint。");
     }
 
     private static string Sanitize(string value)

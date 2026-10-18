@@ -8,6 +8,11 @@ artifacts/
 dist/
 models/
 *.gguf
+runtime/
+*.download
+# 模型/运行时的本地指纹（<artifact>.sha256）是「这台机器上首次信任时」记下的摘要，
+# 必须留在本机，绝不能提交进仓库当信任根。
+*.sha256
 .venv-funasr/
 __pycache__/
 .DS_Store

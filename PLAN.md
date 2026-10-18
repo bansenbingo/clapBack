@@ -2,7 +2,7 @@
 
 ## Summary
 
-ClapBack 首版定位为 Windows 10/11 的守望先锋专用托盘程序：
+ClapBack 首版定位为 Windows 10/11 的守望先锋语音工具，包含主窗口和托盘：
 
 1. 按一次全局热键开始录音。
 2. 再按一次停止录音并交给本机部署的中文语音模型快速识别。
@@ -14,10 +14,11 @@ ClapBack 首版定位为 Windows 10/11 的守望先锋专用托盘程序：
 ## 当前实现边界
 
 - 已实现本地 SenseVoiceSmall GGUF 的 Windows 子进程适配：模型/运行时/VAD 路径、SHA-256 校验、CPU/Vulkan/CUDA 后端、临时音频清理、超时、取消和低优先级启动。
+- 已实现模型与运行时的完整性信任根：`LocalModelCatalog.cs` 硬编码各模型文件的 SHA-256（随源码评审发布），用户配置的 `LocalModelSha256` 只能收窄不能替换；下载后比对源端声明摘要（Hugging Face `X-Linked-Etag: "sha256:<hex>"`、ModelScope 裸 64 位十六进制）；没有内置锁定值的文件首次信任后落盘 `<artifact>.sha256` 指纹，之后每次使用复检，挡住校验后被替换的 TOCTOU。`RequireModelIntegrity=true`（默认）时无法自证的文件一律拒绝。
 - 已实现本地模型首次使用时从 Hugging Face `FunAudioLLM/SenseVoiceSmall-GGUF` 下载 `sensevoice-small-q8.gguf`；模型缓存位于被 Git 忽略的 `models/` 目录，支持取消、临时文件和原子替换。
-- 已实现 Hugging Face 下载超时/网络失败后自动回退 ModelScope；模型目录新增 `Fun-ASR-Nano-2512` 和中文 `Paraformer` 选项。Paraformer 提供两边的 GGUF Q8 文件；Fun-ASR 的 ModelScope 官方回退是 `model.pt`，需 FunASR/PyTorch 运行时，当前 llama.cpp 适配器会明确拒绝不兼容格式。
+- 已实现 Hugging Face 下载超时/网络失败后自动回退 ModelScope；模型目录提供 `SenseVoiceSmall` 和中文 `Paraformer` 两个选项，两者都由 llama.cpp GGUF 运行时直接加载。**`Fun-ASR-Nano-2512` 已移除**：它的两个下载源指向不同产物（Hugging Face 是 `fun-asr-nano-2512-q8_0.gguf`，ModelScope 是 `model.pt`），无法用一个锁定哈希同时代表，可靠性不足。
 - 已增加 macOS 实验适配：使用项目专用 `.venv-funasr` 安装 FunASR/ModelScope，通过 `iic/SenseVoiceSmall` 完成 WAV 单次识别；新增 `ClapBack.MacExperiment` 的 .NET 8 入口，Windows WPF 主链路不变。
-- 已增加 `ClapBack.Desktop` Avalonia UI 跨平台 GUI：Windows/macOS 共用一套 .NET 8 XAML 界面，支持音频文件选择、本地识别、结果复制和设置持久化；macOS 选择 FunASR Python 适配器，Windows 选择现有 GGUF 适配器。
+- 已增加 `ClapBack.Desktop` Avalonia UI 跨平台 GUI：Windows/macOS 共用一套 .NET 8 XAML 界面，支持麦克风录音、本地识别、结果复制和设置持久化；macOS 选择 FunASR Python 适配器，Windows 选择现有 GGUF 适配器。**已移除「选择音频文件并识别」入口**——目标场景是实时同声传译，输入必须来自麦克风，文件导入只会掩盖麦克风链路的问题。非 WAV 归一化代码保留（见下）。
 - macOS GUI 已接入麦克风录音：通过 `sounddevice`/PortAudio 采集 16 kHz 单声道 WAV，再交给 `MacOsFunAsrTranscriptionProvider` 调用 ModelScope `iic/SenseVoiceSmall`；录音权限和依赖安装步骤已写入 README。
 - 已增加 macOS `.app` 打包：`scripts/build-macos-app.sh` 发布自包含 .NET 8/Avalonia bundle，生成 `dist/ClapBack.app`，支持 Finder 双击启动；路径解析兼容 Finder 启动时的非项目工作目录。
 - 已修复 macOS 识别质量与速度问题：录音 sidecar 自动避开 Steam/BlackHole 等虚拟输入并优先 MacBook 内置麦克风；FunASR 改为常驻 JSON sidecar，模型只在首次识别时加载，默认 CPU 以保证输出稳定。
@@ -25,6 +26,12 @@ ClapBack 首版定位为 Windows 10/11 的守望先锋专用托盘程序：
 - 云端层目前继续使用现有 Whisper 兼容 multipart `/audio/transcriptions` 形状；`glm-asr-2512` 已可作为模型 ID 配置，但其供应商专用 API 路径、鉴权和请求格式尚未在线验证，不能宣称 GLM 云端直连已完成。
 - 当前 `IAudioRecorder` 仍在停止录音后提交完整 WAV，识别运行时按单次命令执行；常驻模型进程和录音期间的增量/部分结果尚未完成，不能宣称已经实现 800ms 首字延迟。
 - 下一步应增加本地常驻 sidecar 或原生流式运行时协议，再将录音分块推送给 `Paraformer-zh-streaming` 或支持流式的 SenseVoice 管线。
+- 已支持非 WAV 输入：`ClapBack.Stt/Audio` 把任意受支持输入归一化成 16 kHz 单声道 16 bit PCM WAV。WAV 走纯托管解码（PCM/IEEE float/EXTENSIBLE，8/16/24/32 bit，下混 + 线性插值重采样），其余格式走 ffmpeg（`ArgumentList` 逐项传参、60 秒超时、`Kill(entireProcessTree:true)`）；缺 ffmpeg 时明确报错而不是发错格式的音频。云端上传按真实容器声明 MIME 与文件名。
+- 已允许把 Hugging Face / ModelScope 端点换成镜像（`HuggingFaceEndpoint`/`ModelScopeEndpoint`，只接受 `https://`，本机回环除外），用于直连被 DNS 劫持的网络；换镜像不削弱安全性，内容仍要过 SHA-256。**默认端点就是镜像 `https://hf-mirror.com/`**——`huggingface.co` 在不少网络被 DNS 劫持到无关 IP（实测解析到 Facebook 地址段），直连必然超时；确认可直连时把 `HuggingFaceEndpoint` 填回 `https://huggingface.co/`。
+- 已按隐私与安全审核结论收紧默认行为：未知/非法 `TranscriptionMode` 一律 fail-closed 到「仅本地」（设置以名称字符串持久化，读到不认识的值整份设置作废而不是猜）；`LocalFirst` 下空文本默认不再静默上传（`FallbackOnEmptyResult` 显式开启才回退）；云端端点强制 HTTPS；发送前校验目标窗口进程白名单，不匹配则一个键都不注入；剪贴板按格式整体快照与恢复，发送间隙用户复制了新内容就不覆盖。
+- 已实现**启动时检测并安装运行环境**（`RuntimeProvisioner`）：依次检查本地识别运行时、识别模型、VAD 模型，缺哪样装哪样，并把每一步的结果摊开显示在 GUI 的「运行环境」面板里；补齐之前不放行录音。运行时来自 `modelscope/FunASR` 的 GitHub Release `runtime-llamacpp-v0.2.6`（默认 CPU 包 `funasr-llamacpp-windows-x64.zip`，可切 AVX2 / Vulkan / CUDA），下载后按 GitHub 资产 `digest` 校验再**只解出 `llama-funasr-sensevoice.exe` 这一个文件**写到 `runtime/`——不做整包解压，压缩包里的 `../` 路径穿越条目根本不会被写盘。
+- 已实现**麦克风选择**：GUI「设置 → 麦克风」下拉框列出本机输入设备（Windows 走 NAudio/WaveInEvent，macOS 走 `tools/macos_funasr_record.py --list`）。配置里存**设备名**而不是下标——下标会随插拔和驱动更新漂移；找不到就退回系统默认设备，绝不「找不到就随便挑一个硬件」。`WavAudioRecorder` 与设备枚举移到 `ClapBack.Stt/Audio/`，让 WPF 托盘和 Avalonia GUI 共用同一份实现。
+- **重要教训（Hugging Face Xet 迁移）**：Hugging Face 现在把 LFS 文件放在 Xet 存储后端，`HttpClient` 跟随 302 后拿到的**最终响应**里 `X-Linked-Etag` 已消失，只剩一个 64 位十六进制的 Xet `ETag`，它**不是文件的 SHA-256**。旧实现把它当摘要用，导致每一次合法下载都被判成「声明值不一致」而丢弃。现改为：裸 64 位十六进制只从 `X-Linked-Etag` 认（ModelScope 的约定），普通 `ETag` 必须显式带 `sha256:` 前缀。同时明确主从关系：**内置锁定哈希是信任根，命中即放行，源端声明值不能反过来否决它**。
 
 ## 技术与模块
 
@@ -58,7 +65,7 @@ ClapBack 首版定位为 Windows 10/11 的守望先锋专用托盘程序：
   - `ITranscriptionProvider` 继续作为唯一识别抽象；实现 `LocalSenseVoiceProvider`、`CloudWhisperCompatibleProvider`，并由 `CompositeTranscriptionProvider` 按设置选择本地、云端或失败回退。
   - 本地首选 `SenseVoiceSmall-GGUF` Q8（约 234M 参数、模型文件约 254MB），通过 FunASR/llama.cpp 的 Windows x64 运行包调用；不要求 Python 常驻，适合与游戏同时运行。
   - 支持配置模型文件路径、运行时可执行文件路径、CPU/Vulkan 后端、线程数、语言、VAD、超时和取消；默认低于正常优先级运行并限制线程，避免抢占游戏资源。
-  - 模型文件首次使用前检查存在性、文件大小和 SHA-256 校验值；模型下载、升级和删除由设置页显式触发。
+  - 模型文件首次使用前检查存在性、文件大小和 SHA-256 校验值；模型下载、升级和删除由设置页显式触发。校验分三层：内置锁定哈希（信任根）→ 下载时源端声明摘要 → 落盘指纹 `<artifact>.sha256` 每次复检；`RequireModelIntegrity=true` 时无法自证即拒绝执行，不允许「空哈希跳过校验」。
   - 本地运行时尽量常驻并预加载模型，录音期间按 VAD/分块进行增量推理；停止热键时只提交最终片段，避免每次重新加载模型。
   - 运行时进程使用临时 WAV 或本地流式协议，读取结构化文本输出；超时或崩溃时终止子进程并返回可重试错误。
   - 默认语言为中文，支持中英文混合；保留热词和标点后处理扩展点。
@@ -70,6 +77,8 @@ ClapBack 首版定位为 Windows 10/11 的守望先锋专用托盘程序：
 
 ### 录音与发送流程
 
+**主流程是「识别 → 文字进剪贴板 → 玩家自己在游戏里按 Ctrl+V」。** 程序的职责到「把文字放进剪贴板」为止，发送时机和内容由玩家掌握。
+
 - 首次按热键：
   - 检查麦克风权限和识别配置。
   - 开始录音。
@@ -78,10 +87,14 @@ ClapBack 首版定位为 Windows 10/11 的守望先锋专用托盘程序：
   - 停止录音并进入识别状态。
   - 默认最长录音 30 秒，超过后自动停止。
   - 本地模式在常驻模型进程中推理并获取文字，不发起外网请求；云端模式或回退策略明确启用时才发送音频。
+  - **先做敏感词同音替换**（把「傻逼」这类词换成「沙币」「啥波一」等同音词），字库可配置。替换必须发生在写剪贴板之前，保证玩家 `Ctrl+V` 粘出去的就是替换后的文字。
+  - **把识别出来的文字写进系统剪贴板并留在那里。**
+  - 提示「已复制到剪贴板，在游戏中按 Ctrl+V 粘贴」。
+- 仅当 `AutoSend = true`（**默认 false**）时才额外执行：
   - 打开守望先锋聊天框。
   - 粘贴文字。
   - 自动按 Enter 发送。
-  - 成功后清理临时音频并恢复剪贴板。
+  - `RestoreClipboard = true`（**默认 false**）时才把剪贴板还原成发送前的内容；默认不还原，好让文字继续留在剪贴板里供玩家再粘一次。
 - 识别期间再次按热键：
   - 忽略并提示“正在识别”。
   - 设置中提供取消当前任务的操作。
@@ -103,6 +116,9 @@ ClapBack 首版定位为 Windows 10/11 的守望先锋专用托盘程序：
 - 聊天框打开按键和目标频道。
 - 自动发送开关。
 - 是否恢复原剪贴板。
+- 敏感词同音替换开关与字库（GUI 的「字库」页里增删改，随设置持久化，可一键恢复默认）。
+- 模型下载端点（`HuggingFaceEndpoint` / `ModelScopeEndpoint`，默认 hf-mirror + ModelScope）与运行时下载端点（`RuntimeDownloadEndpoint`，默认 GitHub）。
+- 运行时/模型/VAD 的下载源版本与资产名（`RuntimeReleaseTag` / `RuntimeAssetName`），以及各自的锁定 SHA-256。
 - 开机启动。
 - 提示音和通知开关。
 
@@ -184,7 +200,7 @@ ClapBack 首版定位为 Windows 10/11 的守望先锋专用托盘程序：
 - 首版本地默认采用 `SenseVoiceSmall-GGUF` Q8：中文优先、约 254MB 模型文件、官方提供 Windows 边缘运行路径，且官方资料报告 CPU 约 17× 实时；这是游戏并行场景的首选。
 - `Paraformer-zh-streaming`（约 220M、约 600ms 分块）作为低延迟备选，但只有在目标硬件实测优于 SenseVoice 且可接受 Windows 部署复杂度时切换。
 - `Fun-ASR-Nano`（约 800M）和本地 `GLM-ASR-Nano-2512`（1.5B、约 4.5GB 权重）不作为默认本地模型，以免占用过多内存/显存；GLM-ASR-2512 保留为云端 API 选项。
-- 首版默认自动打开聊天框并发送；设置中允许改为“只粘贴不发送”。
+- 首版默认识别后复制到剪贴板，由用户在聊天框按 Ctrl+V；自动打开聊天框并发送需要在设置中显式开启。
 - 支持本地优先与云端回退，不做云端录音历史、账号系统和移动端应用；模型下载统计和日志不记录录音内容或识别文本。
 
 ## 模型对比与选型依据

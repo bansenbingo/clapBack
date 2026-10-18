@@ -1,113 +1,109 @@
-# clapBack
+# ClapBack
 
-Windows 托盘工具：按一次全局热键开始录音，再按一次将语音转成文字并发送到守望先锋聊天框。
+Windows 语音转文字工具：按一次热键开始录音，再按一次停止识别，结果自动复制到剪贴板。在游戏聊天框按 `Ctrl+V` 即可粘贴。
 
-## 当前状态
+## Windows 快速开始
 
-工程已按 [`PLAN.md`](PLAN.md) 建立为 .NET 8 solution：
+当前 Windows 主入口是 **`ClapBack.exe`**，包含主窗口、全局热键、托盘、设置和字库编辑。本次本地发布目录为 `dist/windows-mvp/`。
 
-- `ClapBack.Core`：状态机、配置模型和跨平台接口。
-- `ClapBack.Stt`：本地 SenseVoiceSmall GGUF 运行时适配器、Whisper 兼容云端客户端和本地/云端选择层。
-- `ClapBack.Windows`：WPF 托盘程序、CapsLock 全局热键、NAudio 录音、剪贴板发送和 Windows Credential Manager。
-- `ClapBack.Desktop`：基于 Avalonia UI 的 Windows/macOS 跨平台桌面界面；提供本地音频文件选择、识别结果预览、复制和设置持久化。
-- `ClapBack.Tests`：核心状态机测试。
+1. 双击 `dist/windows-mvp/ClapBack.exe`。请保留同目录的原生 DLL，不要单独搬走 exe。
+2. 首次启动会检查并准备本地识别运行时和模型，进度显示在主窗口底部。下载期间可以取消准备，或直接打开“设置与字库”调整网络端点、模型路径或识别模式。
+3. 在“设置与字库 → 录音与游戏”中选择麦克风、热键和最长录音时长，点击“保存并应用”。默认热键为 `CapsLock`，默认最长 30 秒。
+4. 按热键或“开始录音”，说完再按一次。到达时限也会自动停止并识别。
+5. 识别结果会显示在窗口中，并自动复制到剪贴板。复制失败时文字仍保留，可点击“复制文字”重试。
+6. 在游戏中打开聊天框，按 `Ctrl+V`，自行按 Enter 发送。
 
-## Windows/macOS 跨平台 GUI
+关闭主窗口会收起到托盘；右键托盘可重新打开窗口、进入设置或退出。识别中可以取消本次语音，退出时会结束当前任务。
 
-GUI 框架选用 [Avalonia UI](https://avaloniaui.net/) 11：它在 Windows 和 macOS 上共享同一套 XAML/.NET 8 界面代码，避免维护两套原生窗口，同时可以复用 `ClapBack.Core` 与 `ClapBack.Stt`。启动桌面 GUI：
+### 默认行为
 
-```bash
-DOTNET_ROOT=/usr/local/share/dotnet /usr/local/share/dotnet/dotnet run \
-  --project src/ClapBack.Desktop -c Release
+- 默认“仅本地”，录音不会上传云端。首次安装所需组件需要网络；组件就绪后可离线识别。
+- 默认只复制文字，`AutoSend=false`。如需自动打开聊天框、粘贴并发送，在设置中显式开启，并在游戏前台使用全局热键录音。
+- 自动发送的默认目标进程为 `Overwatch,Overwatch2`，聊天键可选 Enter 或 F2。
+- 识别前应用同音替换；预览、剪贴板和发送使用同一份文本。“字库”页支持新增、修改、删除和恢复默认，点击“保存并应用”后生效。
+- 热键支持 CapsLock、F1–F24 和 Ctrl/Alt/Shift/Win 组合，例如 `Ctrl+Shift+Space`。新热键注册失败时保留原热键。
+- VAD 是可选组件，未安装不会阻止短语音识别。
+
+## 本地识别环境
+
+Windows 使用 FunASR / llama.cpp GGUF 运行时，默认模型为 SenseVoiceSmall Q8；设置中也可选择 Paraformer 中文 Q8。
+
+```text
+windows-mvp/
+    ClapBack.exe
+    *.dll                           原生运行库，随程序一起保留
+    models/
+        sensevoice-small-q8.gguf     默认识别模型，约 254 MB
+        fsmn-vad.gguf                可选 VAD
+    runtime/
+        llama-funasr-sensevoice.exe
+    audio-temp/                     推理期间的临时 WAV，结束后清理
 ```
 
-当前跨平台 GUI 已支持：
+运行时默认来自 `modelscope/FunASR` 的 GitHub Release `runtime-llamacpp-v0.2.6`，资产为 `funasr-llamacpp-windows-x64.zip`。模型默认从 `https://hf-mirror.com/` 下载，失败后按设置回退到 ModelScope。模型和本地引擎按需下载，不嵌入应用 exe。
 
-- 选择 PCM WAV 文件并调用本地识别提供程序（其他格式转换列为后续工作）。
-- 在 macOS 上通过“开始录音/停止并识别”直接采集 16 kHz 单声道麦克风音频，随后调用本地 FunASR SenseVoiceSmall。
-- 展示识别状态和结果，一键复制到系统剪贴板。
-- 保存识别模式、模型、macOS FunASR Python 路径、热键和自动发送选项。
+若无法下载，在“识别与下载”中展开下载端点设置后重试。也可以自行放置匹配版本的组件，再关闭自动准备或自动下载。相对路径以 **exe 所在目录** 为基点，与启动时的工作目录无关。请把程序放在当前用户可写的文件夹中。
 
-### macOS App 启动
+已有的完整性校验保持原状，本轮重点是功能和交互，没有扩展哈希、安全审计或签名方案。组件安装的详细实现见 `RuntimeProvisioner`、`LocalModelCatalog` 和 `HuggingFaceModelDownloader`。
 
-仓库提供 macOS `.app` 打包脚本。执行一次构建后，可直接在 Finder 中双击应用，之后不需要命令行启动：
+## 设置和数据位置
 
-```bash
-./scripts/build-macos-app.sh
-```
+- Windows 设置与字库：`%APPDATA%/ClapBack/settings.json`。
+- Windows 云端 API Key：Windows Credential Manager，凭据名 `ClapBack.Stt.ApiKey`。
+- Avalonia 桌面实验入口：独立使用 `%APPDATA%/ClapBack/desktop-settings.json`，与 Windows 主程序不共用设置文件。
+- Windows 模型、运行时和临时推理音频位于程序目录下。备份设置时需另外备份上述用户配置文件；整个应用并非完全便携。
 
-生成位置：`dist/ClapBack.app`。当前 Apple Silicon 默认使用 `osx-arm64`；Intel Mac 可使用 `MACOS_RID=osx-x64 ./scripts/build-macos-app.sh`。`.app` 会包含 .NET 运行时和 Avalonia 原生库，但 FunASR Python 环境仍安装在仓库的 `.venv-funasr` 中。
+## 云端识别
 
-macOS 默认使用 `MacOsFunAsrTranscriptionProvider` 调用 `.venv-funasr` 中的 FunASR；Windows 默认使用现有 SenseVoiceSmall GGUF 运行时。桌面 GUI 的云端模式读取 `CLAPBACK_STT_API_KEY` 环境变量，不会把密钥写入跨平台配置文件；Windows 生产托盘程序仍使用 Credential Manager。录音、全局热键和守望先锋聊天发送仍沿用 Windows WPF 托盘链路，跨平台统一录音/热键抽象列为下一阶段工作。
+Windows 设置中可选“仅云端”或“本地优先（失败时上传云端）”。填写服务 URL、模型名和 API Key 后保存。仅云端模式直接跳过本地组件准备。
 
-首次在 macOS 使用 GUI 前，请先安装 FunASR 及麦克风采集依赖：
+接口使用 Whisper 兼容的 `multipart /audio/transcriptions` 请求。服务 URL 通常以 `/v1` 结尾；模型名由服务供应商决定。默认值 `glm-asr-2512` 只是可配置模型名，不代表已验证某家 GLM 专用接口。没有有效服务地址和密钥时不能完成云端转写。
 
-```bash
-./scripts/macos-funasr-setup.sh
-DOTNET_ROOT=/usr/local/share/dotnet /usr/local/share/dotnet/dotnet run \
-  --project src/ClapBack.Desktop -c Release
-```
+本地优先模式会在本地识别失败时通知并上传音频到配置的服务；空识别结果默认不触发上传。
 
-首次点击“开始录音”时，macOS 会请求麦克风权限；请在“系统设置 → 隐私与安全性 → 麦克风”中允许终端或 ClapBack。录音进程达到设置中的最长时长后会自动停止，默认 30 秒。
+## 构建与发布
 
-macOS 录音会自动优先选择 MacBook 内置麦克风，并避开 Steam Streaming、BlackHole 等虚拟音频设备。FunASR 模型会在第一次识别时加载到常驻 sidecar，后续识别复用同一模型，避免每次重新加载约 936 MB 权重。默认使用 CPU 以保证 SenseVoice 输出稳定；确认本机 PyTorch/MPS 结果正确后，可在设置文件中将 `MacOsFunAsrDevice` 改为 `mps`。
-
-如果识别结果异常（例如只输出单个字符或韩文 token），请先检查“系统设置 → 隐私与安全性 → 麦克风”权限，并确认没有把 Steam/虚拟音频设备设为唯一输入设备；应用会在录音启动时自动选择真实麦克风。
-
-当前本地识别适配器会在停止录音后启动 FunASR llama.cpp 子进程完成一次 SenseVoiceSmall 推理，并支持模型校验、超时、取消和本地/云端模式选择。录音期间的增量转写和常驻模型进程仍是后续工作；当前不能把它描述为完整流式识别。
-
-## Windows 构建
-
-在 Windows 10 22H2 或 Windows 11、安装 .NET 8 SDK 后执行：
+需要 Windows 和 .NET 8 或更新的 SDK。源码项目目标为 .NET 8，普通 `dotnet test` 需要匹配的 .NET 8 运行时。
 
 ```powershell
 dotnet restore ClapBack.sln
-dotnet build ClapBack.sln -c Release -p:Platform=x64
+dotnet build ClapBack.sln -c Release
 dotnet test tests/ClapBack.Tests/ClapBack.Tests.csproj -c Release
 dotnet publish src/ClapBack.Windows/ClapBack.Windows.csproj `
-  -c Release -r win-x64 --self-contained true `
-  -p:PublishSingleFile=true -p:PublishReadyToRun=true
+    -c Release -r win-x64 --self-contained true `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=false `
+    -o dist/windows-mvp
 ```
 
-首次启动后右键托盘图标进入设置。默认识别模式为“仅本地”，需要准备 FunASR llama.cpp Windows 运行时、`SenseVoiceSmall-GGUF` Q8 模型和可选的 FSMN-VAD 模型：
+自包含发布自带 .NET 运行时，目标机器不需要另装 .NET。WPF 原生 DLL 必须随 exe 分发，运行时不依赖将它们解压到 `%TEMP%/.net`。解决方案配置为 `Any CPU`，无需向整个 solution 传 `-p:Platform=x64`。
 
-- 运行时：`runtime/llama-funasr-sensevoice.exe`
-- 模型：`models/sensevoice-small-q8.gguf`
-- VAD：`models/fsmn-vad.gguf`
+## Avalonia 桌面与 macOS 实验入口
 
-模型不会提交到 GitHub。首次选择本地识别并开始识别时，程序会自动从 Hugging Face 下载默认模型：
+`ClapBack.Desktop` 使用 Avalonia 11，在 Windows/macOS 上提供麦克风录音、时限自动停止、结果预览、自动复制和设置/字库编辑。Windows 游戏场景建议使用上面的 WPF 主入口；Avalonia 入口尚未实现全局热键和游戏自动发送，不显示这些无效选项。
 
-- 仓库：`FunAudioLLM/SenseVoiceSmall-GGUF`
-- 分支：`main`
-- 文件：`sensevoice-small-q8.gguf`
-- 本地缓存：`models/sensevoice-small-q8.gguf`
+```bash
+dotnet run --project src/ClapBack.Desktop -c Release
+```
 
-下载使用临时文件完成后再原子替换，下载失败或取消不会留下可被误用的半成品。可在设置 JSON 中将 `LocalModelAutoDownload` 设为 `false`，改为只使用已存在的本地模型；`models/`、`*.gguf` 已加入 `.gitignore`，不会随源码上传。
-
-设置中的本地模型下拉框还提供：
-
-- `Fun-ASR-Nano-2512 Q8`：Hugging Face 使用 `FunAudioLLM/Fun-ASR-Nano-2512-GGUF` 的 Q8 GGUF；ModelScope 回退源为官方 `FunAudioLLM/Fun-ASR-Nano-2512/model.pt`。后者是 FunASR/PyTorch 格式，需要对应的外部运行时，不能直接交给当前 llama.cpp GGUF 运行时。
-- `Paraformer 中文 Q8`：使用 `FunAudioLLM/Paraformer-GGUF` 的 Q8 GGUF，Hugging Face 和 ModelScope 均可下载，适合中文低延迟备选。
-
-每个模型都先尝试 Hugging Face；超过配置的下载超时时间或发生网络错误后自动切换 ModelScope。ModelScope 下载同样写入被 Git 忽略的本地模型缓存。
-
-本地识别不上传音频。设置中也可以选择“本地优先（失败时云端回退）”或“仅云端”，配置 Whisper 兼容服务 URL、模型（例如 `glm-asr-2512`）和 API Key。云端 API Key 使用 Windows Credential Manager 保存。默认全局热键为 CapsLock。
-
-当前云端实现使用 Whisper 兼容的 `multipart /audio/transcriptions` 请求；`glm-asr-2512` 已作为可配置模型 ID 保留，但 GLM 供应商专用 API 的请求格式仍需单独验证。
-
-## macOS 语音转文字实验
-
-macOS 不运行 Windows 的 `llama-funasr-sensevoice.exe`。仓库提供了一个不影响 Windows WPF 主程序的 Python 实验适配器，直接调用 FunASR 的 ModelScope `iic/SenseVoiceSmall` 模型：
+macOS 先准备 Python 环境：
 
 ```bash
 ./scripts/macos-funasr-setup.sh
-.venv-funasr/bin/python tools/macos_funasr_transcribe.py /path/to/recording.wav
-# 或使用 .NET 8 macOS 试验入口
-dotnet run --project src/ClapBack.MacExperiment -- /path/to/recording.wav
+./scripts/build-macos-app.sh
 ```
 
-首次执行识别时，FunASR 会把模型缓存到本机 ModelScope 缓存目录；默认自动选择 Apple Silicon MPS，遇到 MPS 不兼容时可加 `--device cpu`。录音按钮已经接入 macOS GUI；全局热键和守望先锋聊天发送 UI 仍是后续工作。
+生成位置为 `dist/ClapBack.app`。Apple Silicon 默认 `osx-arm64`；Intel 可设置 `MACOS_RID=osx-x64`。应用包含 .NET/Avalonia，FunASR Python 环境仍需单独准备，并在设置中填写解释器路径。
 
-## 注意事项
+macOS 使用 `sounddevice` / PortAudio 采集音频，首次运行需允许麦克风权限；FunASR 通过常驻 Python sidecar 复用模型，默认 CPU。macOS 环境检查不再下载 Windows GGUF 引擎或 VAD。桌面入口的云端密钥从 `CLAPBACK_STT_API_KEY` 环境变量读取。
 
-程序使用标准 Windows 全局热键、剪贴板和输入模拟，不读取或修改守望先锋进程内容。自动输入行为仍需遵守游戏服务条款；建议先在自定义房间验证聊天频道和发送按键。
+## 实现范围
+
+- `ClapBack.Core`：录音状态机、取消/时限、配置、热键解析、同音替换。
+- `ClapBack.Stt`：GGUF / macOS FunASR / Whisper 兼容接口、音频归一化、组件准备。
+- `ClapBack.Windows`：WPF 主窗口、托盘、全局热键、设备选择、剪贴板、可选游戏发送。
+- `ClapBack.Desktop`：Avalonia 跨平台实验界面。
+- `ClapBack.Tests`：状态机、音频、配置、下载与功能回归测试。
+
+Windows 当前按“停止录音后单次识别”工作，尚未实现录音期间增量转写或常驻 GGUF 引擎，不承诺流式首字延迟。实际麦克风、识别速度、GPU 后端、守望先锋聊天输入和 macOS 行为需要在对应设备上验证。
+
+详细规划见 [PLAN.md](PLAN.md)。

@@ -13,14 +13,21 @@ namespace ClapBack.Desktop;
 internal sealed class MacOsMicrophoneRecorder : IAudioRecorder
 {
     private readonly Func<ClapBackSettings> _settings;
+    private readonly Func<int> _inputDeviceNumber;
     private readonly object _sync = new();
     private Process? _process;
     private string? _audioPath;
     private Task<string>? _standardErrorTask;
 
-    public MacOsMicrophoneRecorder(Func<ClapBackSettings> settings)
+    /// <param name="inputDeviceNumber">
+    /// 麦克风下标，通常来自 <c>IAudioInputDeviceCatalog.ResolveIndex</c>。
+    /// 返回负数表示「没有指定设备」，此时不传 <c>--device</c>，由脚本自己挑默认麦克风
+    /// （脚本会避开 Steam / BlackHole 之类的虚拟回环设备）。
+    /// </param>
+    public MacOsMicrophoneRecorder(Func<ClapBackSettings> settings, Func<int>? inputDeviceNumber = null)
     {
         _settings = settings;
+        _inputDeviceNumber = inputDeviceNumber ?? (() => -1);
     }
 
     public bool IsRecording
@@ -46,7 +53,9 @@ internal sealed class MacOsMicrophoneRecorder : IAudioRecorder
 
             var settings = _settings();
             var python = ResolvePath(settings.MacOsPythonPath);
-            var script = ResolvePath("tools/macos_funasr_record.py");
+            var script = ResolvePath(string.IsNullOrWhiteSpace(settings.MacOsFunAsrRecordScriptPath)
+                ? "tools/macos_funasr_record.py"
+                : settings.MacOsFunAsrRecordScriptPath);
             if (!File.Exists(python))
             {
                 throw new FileNotFoundException("macOS FunASR Python 环境不存在，请先运行 scripts/macos-funasr-setup.sh", python);
@@ -74,6 +83,12 @@ internal sealed class MacOsMicrophoneRecorder : IAudioRecorder
             startInfo.ArgumentList.Add(_audioPath);
             startInfo.ArgumentList.Add("--max-seconds");
             startInfo.ArgumentList.Add(Math.Clamp(settings.MaxRecordingSeconds, 1, 300).ToString());
+            var deviceNumber = _inputDeviceNumber();
+            if (deviceNumber >= 0)
+            {
+                startInfo.ArgumentList.Add("--device");
+                startInfo.ArgumentList.Add(deviceNumber.ToString());
+            }
 
             var process = new Process { StartInfo = startInfo };
             if (!process.Start())
@@ -105,8 +120,19 @@ internal sealed class MacOsMicrophoneRecorder : IAudioRecorder
 
         try
         {
-            await process.StandardInput.WriteLineAsync("stop").WaitAsync(cancellationToken).ConfigureAwait(false);
-            await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
+            if (!process.HasExited)
+            {
+                try
+                {
+                    await process.StandardInput.WriteLineAsync("stop").WaitAsync(cancellationToken).ConfigureAwait(false);
+                    await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (IOException)
+                {
+                    // The capture script can close stdin as its recording limit
+                    // expires. Wait for its exit below and collect the WAV/error.
+                }
+            }
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(10));
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);

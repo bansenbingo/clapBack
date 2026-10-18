@@ -2,9 +2,17 @@ using System.IO;
 using ClapBack.Core.Abstractions;
 using ClapBack.Core.Models;
 using NAudio.Wave;
+using NAudio.Utils;
 
-namespace ClapBack.Windows.Infrastructure;
+namespace ClapBack.Stt.Audio;
 
+/// <summary>
+/// 用 NAudio / WASAPI 录成 16kHz 单声道 PCM WAV，输出在内存里（不落盘）。
+///
+/// 设备下标由 <c>Func&lt;int&gt;</c> 注入，通常来自
+/// <see cref="IAudioInputDeviceCatalog.ResolveIndex"/>：<c>ClapBackSettings.MicrophoneDeviceId</c>
+/// 存的是设备名，注册开始录音时才解析成下标。
+/// </summary>
 public sealed class WavAudioRecorder : IAudioRecorder
 {
     private readonly object _sync = new();
@@ -41,7 +49,8 @@ public sealed class WavAudioRecorder : IAudioRecorder
             }
 
             _buffer = new MemoryStream();
-            _writer = new WaveFileWriter(_buffer, new WaveFormat(16_000, 16, 1));
+            // Dispose finalizes the WAV header; keep the buffer open until it is copied.
+            _writer = new WaveFileWriter(new IgnoreDisposeStream(_buffer), new WaveFormat(16_000, 16, 1));
             _completion = new TaskCompletionSource<RecordedAudio>(TaskCreationOptions.RunContinuationsAsynchronously);
             _waveIn = new WaveInEvent
             {
@@ -51,7 +60,23 @@ public sealed class WavAudioRecorder : IAudioRecorder
             };
             _waveIn.DataAvailable += OnDataAvailable;
             _waveIn.RecordingStopped += OnRecordingStopped;
-            _waveIn.StartRecording();
+            try
+            {
+                _waveIn.StartRecording();
+            }
+            catch
+            {
+                _waveIn.DataAvailable -= OnDataAvailable;
+                _waveIn.RecordingStopped -= OnRecordingStopped;
+                _waveIn.Dispose();
+                _waveIn = null;
+                _writer.Dispose();
+                _writer = null;
+                _buffer.Dispose();
+                _buffer = null;
+                _completion = null;
+                throw;
+            }
         }
 
         return Task.CompletedTask;
@@ -76,7 +101,7 @@ public sealed class WavAudioRecorder : IAudioRecorder
 
     public async Task CancelAsync(CancellationToken cancellationToken = default)
     {
-        Task? completion = null;
+        Task<RecordedAudio>? completion = null;
         lock (_sync)
         {
             if (_waveIn is not null)
@@ -90,7 +115,7 @@ public sealed class WavAudioRecorder : IAudioRecorder
         {
             try
             {
-                await completion.WaitAsync(cancellationToken).ConfigureAwait(false);
+                using var discarded = await completion.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch
             {
@@ -116,18 +141,27 @@ public sealed class WavAudioRecorder : IAudioRecorder
         lock (_sync)
         {
             completion = _completion;
-            if (error is null && _buffer is not null && _writer is not null)
+            try
             {
-                _writer.Flush();
-                _buffer.Position = 0;
-                var bytes = _buffer.ToArray();
-                result = new RecordedAudio(new MemoryStream(bytes, writable: false), "clapback.wav");
-                _buffer.Dispose();
+                // Finalize the RIFF/data lengths before copying the bytes. The
+                // IgnoreDisposeStream wrapper leaves the memory buffer readable.
+                _writer?.Dispose();
+                if (error is null && _buffer is not null)
+                {
+                    var bytes = _buffer.ToArray();
+                    result = new RecordedAudio(new MemoryStream(bytes, writable: false), "clapback.wav");
+                }
+            }
+            catch (Exception ex)
+            {
+                error ??= ex;
+            }
+            finally
+            {
+                _writer = null;
+                _buffer?.Dispose();
                 _buffer = null;
             }
-
-            _writer?.Dispose();
-            _writer = null;
             if (_waveIn is not null)
             {
                 _waveIn.DataAvailable -= OnDataAvailable;

@@ -199,7 +199,7 @@ public sealed class MacOsFunAsrTranscriptionProvider : ITranscriptionProvider, I
         }
     }
 
-    private static string ResolvePath(string path)
+    internal static string ResolvePath(string path)
     {
         if (Path.IsPathRooted(path)) return path;
         var workingPath = Path.GetFullPath(path, Directory.GetCurrentDirectory());

@@ -13,11 +13,16 @@ from pathlib import Path
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path, default=None, help="PCM WAV 输出路径")
     parser.add_argument("--max-seconds", type=float, default=30.0)
     parser.add_argument("--sample-rate", type=int, default=16_000)
     parser.add_argument("--channels", type=int, default=1)
     parser.add_argument("--device", type=int, default=None, help="sounddevice input device index")
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="只把可用输入设备以 JSON 写到 stdout，然后退出（不录音）",
+    )
     return parser.parse_args()
 
 
@@ -49,8 +54,33 @@ def select_input_device(sd: object, requested: int | None) -> int | None:
     return max(candidates)[1]
 
 
+def list_devices(sd: object) -> int:
+    """Print the usable input devices as one JSON object on stdout.
+
+    输出格式固定为 ``{"devices":[{"index":int,"name":str}]}``，供 ClapBack 的
+    设备下拉框解析。只列出有输入声道的设备；名字取 sounddevice 的原始 name，
+    调用方按名字记住用户的选择（下标会随插拔变化，不能写进配置）。
+    """
+    try:
+        devices = sd.query_devices()  # type: ignore[attr-defined]
+    except Exception as exc:  # pragma: no cover - depends on local audio stack
+        print(json.dumps({"devices": [], "error": str(exc)}, ensure_ascii=False))
+        return 1
+
+    payload = []
+    for index, device in enumerate(devices):
+        if int(device.get("max_input_channels", 0)) <= 0:
+            continue
+        payload.append({"index": index, "name": str(device.get("name", f"输入设备 {index}"))})
+    print(json.dumps({"devices": payload}, ensure_ascii=False))
+    return 0
+
+
 def main() -> int:
     args = parse_args()
+    if not args.list and args.output is None:
+        print("必须提供 --output，或使用 --list 只列出设备", file=sys.stderr)
+        return 2
     if args.max_seconds <= 0 or args.sample_rate <= 0 or args.channels <= 0:
         print("录音参数无效", file=sys.stderr)
         return 2
@@ -62,6 +92,9 @@ def main() -> int:
         print("未安装 sounddevice/numpy，请先运行 scripts/macos-funasr-setup.sh", file=sys.stderr)
         print(exc, file=sys.stderr)
         return 3
+
+    if args.list:
+        return list_devices(sd)
 
     stop_event = threading.Event()
 

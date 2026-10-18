@@ -7,5 +7,15 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\ClapBack.Core\ClapBack.Core.csproj" />
+    <!-- 让测试可以覆盖 BuildEndpoint、ResolvePath 这类安全闸门的内部实现。 -->
+    <InternalsVisibleTo Include="ClapBack.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!--
+      NAudio 只在 Windows 上被真正调用（WavAudioRecorder / WindowsMicrophoneCatalog）。
+      放在这里而不是某个 UI 工程，是为了让 WPF 托盘和 Avalonia GUI 共用同一份录音与设备枚举实现，
+      不必各写一份。非 Windows 平台这些 API 会抛 PlatformNotSupportedException，调用点都做了系统判断。
+    -->
+    <PackageReference Include="NAudio" Version="2.2.1" />
   </ItemGroup>
 </Project>
