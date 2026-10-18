@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private IntPtr _handle;
     private ClapBackState _state;
     private bool _preparing = true;
+    private bool _minimizeToTray = true;
     private int _maxSeconds = 30;
     private readonly Stopwatch _recordingClock = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(200) };
@@ -32,6 +33,7 @@ public partial class MainWindow : Window
         SourceInitialized += OnSourceInitialized;
         Closing += OnClosing;
         Closed += OnClosed;
+        StateChanged += OnStateChanged;
         _timer.Tick += (_, _) => RecordingTimeText.Text = $"已录音 {_recordingClock.Elapsed.TotalSeconds:0.0} 秒 / {_maxSeconds} 秒";
     }
 
@@ -45,6 +47,7 @@ public partial class MainWindow : Window
 
     public void ApplySettings(ClapBackSettings settings)
     {
+        _minimizeToTray = settings.MinimizeToTray;
         _maxSeconds = Math.Clamp(settings.MaxRecordingSeconds, 1, 300);
         HotkeyText.Text = $"{_hotkey.Name} 开始 / 结束录音，最长 {_maxSeconds} 秒";
         ModeText.Text = settings.TranscriptionMode switch
@@ -133,6 +136,15 @@ public partial class MainWindow : Window
     }
 
     public void CloseForExit() { _allowClose = true; Close(); }
+
+    private void OnStateChanged(object? sender, EventArgs e)
+    {
+        // 设置里允许最小化到右下角托盘；关掉这一项就保持普通最小化（留在任务栏）。
+        if (_minimizeToTray && WindowState == WindowState.Minimized)
+        {
+            Hide();
+        }
+    }
     private void OnClosing(object? sender, CancelEventArgs e)
     {
         if (_allowClose) return;

@@ -154,6 +154,60 @@ public sealed record ClapBackSettings
     public bool PlaySounds { get; init; } = true;
     public bool StartWithWindows { get; init; }
 
+    /// <summary>
+    /// 点最小化时收起到右下角托盘，而不是留在任务栏。默认<b>true</b>。
+    /// <para>关闭窗口本来就会收起到托盘（这是「说完就回游戏」的默认姿势）；这一项只管最小化按钮。</para>
+    /// </summary>
+    public bool MinimizeToTray { get; init; } = true;
+
+    /// <summary>
+    /// 启动时自动以管理员身份重新启动（会弹 UAC 提权框）。默认<b>true</b>。
+    /// <para>
+    /// 提权本身不改变识别行为，但能让后续的全局热键、注入按键和写入程序目录
+    /// 在受控策略下更稳定。用户拒绝 UAC 时程序继续以普通权限运行，不会退出。
+    /// </para>
+    /// </summary>
+    public bool RunAsAdministrator { get; init; } = true;
+
+    // ---- 识别结果整理 ----
+
+    /// <summary>
+    /// 去掉识别结果结尾的句号。默认<b>true</b>。
+    /// <para>
+    /// SenseVoice 之类的模型会在句末补一个「。」（本机实测「…打游戏吧。」），
+    /// 但玩家要粘贴进游戏聊天框，多一个句号反而碍事。只去句号类结尾符号
+    /// （<c>。．.｡</c>），问号和感叹号保留——它们带语气信息。
+    /// </para>
+    /// </summary>
+    public bool TrimTrailingPunctuation { get; init; } = true;
+
+    // ---- 游戏内字符气泡 ----
+
+    /// <summary>
+    /// 是否在游戏画面上显示字符气泡（半透明置顶小窗，显示识别结果）。默认<b>true</b>。
+    /// </summary>
+    public bool ShowOverlay { get; init; } = true;
+
+    /// <summary>气泡字号（磅）。默认 30，允许 12–72。</summary>
+    public double OverlayFontSize { get; init; } = 30;
+
+    /// <summary>气泡不透明度。默认 0.85，允许 0.2–1.0。</summary>
+    public double OverlayOpacity { get; init; } = 0.85;
+
+    /// <summary>气泡显示时长（秒）。默认 6，允许 1–60。</summary>
+    public int OverlayDurationSeconds { get; init; } = 6;
+
+    /// <summary>
+    /// 气泡左上角的屏幕坐标（WPF 的 DIP）。<c>null</c> = 还没拖过，
+    /// 由程序放在主屏底部居中。拖动气泡会写回这里，下次仍从同一位置弹出。
+    /// <para>
+    /// 用可空 double 而不是 <see cref="double.NaN"/>：System.Text.Json 默认
+    /// 拒绝把 NaN 写成合法 JSON，用 NaN 会让「保存设置」直接抛异常。
+    /// </para>
+    /// </summary>
+    public double? OverlayLeft { get; init; }
+    public double? OverlayTop { get; init; }
+
     // ---- 启动时的运行环境检测与自动安装 ----
     // 程序启动时检查「运行时可执行文件 / 识别模型 / VAD 模型」是否就绪，缺失就自动下载安装。
     // 关闭后只做检测、不下载（离线或供应链受限的部署用）。

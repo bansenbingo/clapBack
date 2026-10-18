@@ -135,6 +135,12 @@ public sealed class VoiceInputController
             cancellationToken.ThrowIfCancellationRequested();
 
             var text = result.Text.Trim();
+            if (settings.TrimTrailingPunctuation)
+            {
+                // 模型常在句末补一个「。」，粘进游戏聊天框只会碍事；问号、感叹号保留。
+                text = TranscriptCleaner.StripTrailingPeriod(text);
+            }
+
             if (text.Length == 0)
             {
                 throw new InvalidOperationException("没有识别到有效语音");

@@ -267,7 +267,10 @@ public partial class MainWindow : Window
             _lifetimeCancellation.Token);
         _lifetimeCancellation.Token.ThrowIfCancellationRequested();
         // Preview and clipboard must contain the same substituted text.
-        _lastTranscript = HomophoneSubstitution.Apply(settings, result.Text.Trim());
+        var cleaned = settings.TrimTrailingPunctuation
+            ? TranscriptCleaner.StripTrailingPeriod(result.Text.Trim())
+            : result.Text.Trim();
+        _lastTranscript = HomophoneSubstitution.Apply(settings, cleaned);
         TranscriptText.Text = string.IsNullOrWhiteSpace(_lastTranscript)
             ? "没有识别到有效语音。"
             : _lastTranscript;

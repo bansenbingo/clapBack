@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using ClapBack.Core.Abstractions;
 using ClapBack.Core.Models;
+using ClapBack.Core.Services;
 using ClapBack.Stt;
 
 namespace ClapBack.Windows;
@@ -11,20 +12,33 @@ public partial class SettingsWindow : Window
 {
     private readonly IAudioInputDeviceCatalog _devices;
     private readonly Func<ClapBackSettings, string, Task> _save;
+    private readonly Action<double, double, int>? _previewOverlay;
+    private readonly Action? _resetOverlayPosition;
     private readonly ObservableCollection<DictionaryRow> _entries = [];
     private bool _loading = true;
     private bool _saving;
+    private bool _overlayPositionReset;
     private string? _previousModelDefault;
 
     public SettingsWindow(ClapBackSettings settings, IAudioInputDeviceCatalog devices,
-        string apiKey, Func<ClapBackSettings, string, Task> save)
+        string apiKey, Func<ClapBackSettings, string, Task> save,
+        Action<double, double, int>? previewOverlay = null, Action? resetOverlayPosition = null)
     {
         InitializeComponent();
         Settings = settings;
         _devices = devices;
         _save = save;
+        _previewOverlay = previewOverlay;
+        _resetOverlayPosition = resetOverlayPosition;
         AutoSendCheckBox.IsChecked = settings.AutoSend;
         TranscriptNotificationCheckBox.IsChecked = settings.ShowTranscriptInNotification;
+        MinimizeToTrayCheckBox.IsChecked = settings.MinimizeToTray;
+        RunAsAdministratorCheckBox.IsChecked = settings.RunAsAdministrator;
+        TrimTrailingPunctuationCheckBox.IsChecked = settings.TrimTrailingPunctuation;
+        ShowOverlayCheckBox.IsChecked = settings.ShowOverlay;
+        OverlayFontSizeTextBox.Text = settings.OverlayFontSize.ToString("0.#");
+        OverlayOpacityTextBox.Text = settings.OverlayOpacity.ToString("0.##");
+        OverlayDurationTextBox.Text = settings.OverlayDurationSeconds.ToString();
         HomophoneCheckBox.IsChecked = settings.EnableHomophoneSubstitution;
         AutoProvisionCheckBox.IsChecked = settings.AutoProvisionOnStartup;
         InstallVadCheckBox.IsChecked = settings.InstallVadModel;
@@ -39,11 +53,11 @@ public partial class SettingsWindow : Window
         LocalTimeoutTextBox.Text = settings.LocalSttTimeoutSeconds.ToString();
         LocalBackendComboBox.SelectedIndex = settings.LocalSttBackend.ToLowerInvariant() switch { "vulkan" => 1, "cuda" => 2, _ => 0 };
         BaseUrlTextBox.Text = settings.SttBaseUrl;
-        ModelTextBox.Text = settings.Model;
-        LanguageTextBox.Text = settings.Language;
+        LoadModelOptions(settings.Model);
+        LoadLanguageOptions(settings.Language);
         MaxSecondsTextBox.Text = settings.MaxRecordingSeconds.ToString();
         HotkeyTextBox.Text = settings.Hotkey;
-        TargetProcessesTextBox.Text = settings.TargetWindowProcessNames;
+        RefreshTargetProcesses(settings.TargetWindowProcessNames);
         ChatKeyComboBox.SelectedIndex = settings.ChatOpenKey.Equals("F2", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
         HuggingFaceEndpointTextBox.Text = settings.HuggingFaceEndpoint;
         RuntimeEndpointTextBox.Text = settings.RuntimeDownloadEndpoint;
@@ -73,6 +87,9 @@ public partial class SettingsWindow : Window
             var maxSeconds = Number(MaxSecondsTextBox.Text, 1, 300, "最长录音");
             var threads = Number(LocalThreadsTextBox.Text, 1, 64, "线程数");
             var timeout = Number(LocalTimeoutTextBox.Text, 1, 300, "识别超时");
+            var overlayFontSize = Decimal(OverlayFontSizeTextBox.Text, 12, 72, "气泡字号");
+            var overlayOpacity = Decimal(OverlayOpacityTextBox.Text, 0.2, 1.0, "气泡不透明度");
+            var overlayDuration = Number(OverlayDurationTextBox.Text, 1, 60, "气泡显示时长");
             var mode = (TranscriptionMode)TranscriptionModeComboBox.SelectedIndex;
             if (!Enum.IsDefined(mode)) throw new InvalidOperationException("请选择识别模式。");
             if (mode != TranscriptionMode.LocalOnly)
@@ -80,9 +97,9 @@ public partial class SettingsWindow : Window
                 if (!Uri.TryCreate(BaseUrlTextBox.Text.Trim(), UriKind.Absolute, out var uri)
                     || (uri.Scheme != "https" && !(uri.IsLoopback && uri.Scheme == "http")))
                     throw new InvalidOperationException("云端服务 URL 需要 HTTPS，本机服务可使用 HTTP。");
-                if (string.IsNullOrWhiteSpace(ModelTextBox.Text)) throw new InvalidOperationException("请填写云端模型名称。");
+                if (string.IsNullOrWhiteSpace(ModelComboBox.Text)) throw new InvalidOperationException("请填写云端模型名称。");
             }
-            if (AutoSendCheckBox.IsChecked == true && string.IsNullOrWhiteSpace(TargetProcessesTextBox.Text))
+            if (AutoSendCheckBox.IsChecked == true && LocalProcessCatalog.NormalizeList(TargetProcessesTextBox.Text).Length == 0)
                 throw new InvalidOperationException("自动发送需要填写游戏目标进程，例如 Overwatch,Overwatch2。");
             DictionaryGrid.CommitEdit(DataGridEditingUnit.Cell, true);
             DictionaryGrid.CommitEdit(DataGridEditingUnit.Row, true);
@@ -106,12 +123,21 @@ public partial class SettingsWindow : Window
                 LocalSttRuntimePath = LocalRuntimeTextBox.Text.Trim(), LocalModelPath = LocalModelTextBox.Text.Trim(),
                 LocalVadModelPath = LocalVadModelTextBox.Text.Trim(), LocalSttThreads = threads, LocalSttTimeoutSeconds = timeout,
                 LocalSttBackend = (LocalBackendComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "cpu",
-                SttBaseUrl = BaseUrlTextBox.Text.Trim(), Model = ModelTextBox.Text.Trim(), Language = LanguageTextBox.Text.Trim(),
+                SttBaseUrl = BaseUrlTextBox.Text.Trim(), Model = ModelComboBox.Text.Trim(),
+                Language = (LanguageComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? Settings.Language,
                 CloudProtocol = "WhisperCompatible", AutoSend = AutoSendCheckBox.IsChecked == true,
                 // The transcript is copied before sending, so the sender cannot restore an earlier user clipboard.
-                RestoreClipboard = false, TargetWindowProcessNames = TargetProcessesTextBox.Text.Trim(),
+                RestoreClipboard = false, TargetWindowProcessNames = LocalProcessCatalog.NormalizeList(TargetProcessesTextBox.Text),
                 ChatOpenKey = ChatKeyComboBox.SelectedIndex == 1 ? "F2" : "Enter",
                 ShowTranscriptInNotification = TranscriptNotificationCheckBox.IsChecked == true,
+                MinimizeToTray = MinimizeToTrayCheckBox.IsChecked == true,
+                RunAsAdministrator = RunAsAdministratorCheckBox.IsChecked == true,
+                TrimTrailingPunctuation = TrimTrailingPunctuationCheckBox.IsChecked == true,
+                ShowOverlay = ShowOverlayCheckBox.IsChecked == true,
+                OverlayFontSize = overlayFontSize, OverlayOpacity = overlayOpacity,
+                OverlayDurationSeconds = overlayDuration,
+                OverlayLeft = _overlayPositionReset ? null : Settings.OverlayLeft,
+                OverlayTop = _overlayPositionReset ? null : Settings.OverlayTop,
                 EnableHomophoneSubstitution = HomophoneCheckBox.IsChecked == true, HomophoneEntries = rules,
                 AutoProvisionOnStartup = AutoProvisionCheckBox.IsChecked == true, InstallVadModel = InstallVadCheckBox.IsChecked == true,
                 HuggingFaceEndpoint = HuggingFaceEndpointTextBox.Text.Trim(), RuntimeDownloadEndpoint = RuntimeEndpointTextBox.Text.Trim()
@@ -128,9 +154,139 @@ public partial class SettingsWindow : Window
         finally { _saving = false; SaveButton.IsEnabled = true; SettingsTabs.IsEnabled = true; }
     }
 
+    /// <summary>语言用下拉选，避免手打 "zh-cn" / "Chinese" 这类运行时并不认的写法。</summary>
+    private void LoadLanguageOptions(string current)
+    {
+        var options = new (string Code, string Display)[]
+        {
+            ("zh", "中文（zh）"),
+            ("en", "英语（en）"),
+            ("ja", "日语（ja）"),
+            ("ko", "韩语（ko）"),
+            ("yue", "粤语（yue）"),
+            ("auto", "自动检测（auto）"),
+        };
+
+        LanguageComboBox.Items.Clear();
+        ComboBoxItem? selected = null;
+        foreach (var option in options)
+        {
+            var item = new ComboBoxItem { Content = option.Display, Tag = option.Code };
+            LanguageComboBox.Items.Add(item);
+            if (string.Equals(option.Code, current, StringComparison.OrdinalIgnoreCase))
+            {
+                selected = item;
+            }
+        }
+
+        if (selected is null && !string.IsNullOrWhiteSpace(current))
+        {
+            // 配置里是自定义语言码：保留下来，不能因为下拉里没有就把用户的设置吞掉。
+            selected = new ComboBoxItem { Content = current + "（当前配置）", Tag = current };
+            LanguageComboBox.Items.Add(selected);
+        }
+
+        LanguageComboBox.SelectedItem = selected ?? LanguageComboBox.Items[0];
+    }
+
+    /// <summary>云端模型名常见值给个下拉，仍需允许手输（兼容自建网关）。</summary>
+    private void LoadModelOptions(string current)
+    {
+        var known = new[] { "glm-asr-2512", "whisper-1", "gpt-4o-transcribe", "whisper-large-v3" };
+        ModelComboBox.Items.Clear();
+        foreach (var name in known)
+        {
+            ModelComboBox.Items.Add(name);
+        }
+
+        ModelComboBox.Text = current;
+    }
+
+    private void RefreshProcessesClick(object sender, RoutedEventArgs e)
+        => RefreshTargetProcesses(TargetProcessesTextBox.Text);
+
+    /// <summary>
+    /// 目标进程候选：先放常见游戏（本机没启动也能选），再接上本机当前有窗口的进程。
+    /// 手填项仍然保留，因为白名单可以写多个、也可能想填还没装的游戏。
+    /// </summary>
+    private void RefreshTargetProcesses(string current)
+    {
+        var previous = TargetProcessComboBox.SelectedItem as string;
+        var candidates = new List<string> { "Overwatch", "Overwatch2" };
+        candidates.AddRange(LocalProcessCatalog.ListWindowProcessNames());
+        var distinct = candidates
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        TargetProcessComboBox.ItemsSource = distinct;
+        TargetProcessComboBox.SelectedItem = previous is not null
+            ? distinct.FirstOrDefault(name => string.Equals(name, previous, StringComparison.OrdinalIgnoreCase))
+              ?? distinct[0]
+            : distinct[0];
+        TargetProcessesTextBox.Text = LocalProcessCatalog.NormalizeList(
+            string.IsNullOrWhiteSpace(current) ? TargetProcessesTextBox.Text : current);
+    }
+
+    private void AddTargetProcessClick(object sender, RoutedEventArgs e)
+    {
+        if (TargetProcessComboBox.SelectedItem is not string name || string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        var existing = LocalProcessCatalog.NormalizeList(TargetProcessesTextBox.Text);
+        var tokens = existing.Length == 0
+            ? new List<string>()
+            : existing.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        if (!tokens.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            tokens.Add(name);
+        }
+
+        TargetProcessesTextBox.Text = LocalProcessCatalog.NormalizeList(string.Join(",", tokens));
+        ErrorText.Text = $"已添加目标进程：{name}";
+    }
+
+    private void ClearTargetProcessesClick(object sender, RoutedEventArgs e)
+    {
+        TargetProcessesTextBox.Text = string.Empty;
+        ErrorText.Text = "已清空目标进程；开启自动发送前需要重新填写。";
+    }
+
     private static int Number(string value, int min, int max, string name) =>
         int.TryParse(value, out var result) && result >= min && result <= max ? result
             : throw new InvalidOperationException($"{name}必须是 {min} 到 {max} 之间的整数。");
+
+    private static double Decimal(string value, double min, double max, string name) =>
+        double.TryParse(value, out var result) && result >= min && result <= max ? result
+            : throw new InvalidOperationException($"{name}必须是 {min} 到 {max} 之间的数字。");
+
+    private void PreviewOverlayClick(object sender, RoutedEventArgs e)
+    {
+        if (_previewOverlay is null)
+        {
+            ErrorText.Text = "当前入口不支持气泡预览。";
+            return;
+        }
+
+        try
+        {
+            ErrorText.Text = string.Empty;
+            _previewOverlay(
+                Decimal(OverlayFontSizeTextBox.Text, 12, 72, "气泡字号"),
+                Decimal(OverlayOpacityTextBox.Text, 0.2, 1.0, "气泡不透明度"),
+                Number(OverlayDurationTextBox.Text, 1, 60, "气泡显示时长"));
+        }
+        catch (Exception ex) { ErrorText.Text = ex.Message; }
+    }
+
+    private void ResetOverlayPositionClick(object sender, RoutedEventArgs e)
+    {
+        _overlayPositionReset = true;
+        _resetOverlayPosition?.Invoke();
+        ErrorText.Text = "气泡位置已复位，下次会显示在屏幕底部居中。";
+    }
     private void CancelClick(object sender, RoutedEventArgs e) { if (!_saving) DialogResult = false; }
     private void ModelChanged(object sender, SelectionChangedEventArgs e)
     {

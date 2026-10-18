@@ -1,5 +1,8 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.Net.Http;
+using System.Security.Principal;
 using System.Windows;
 using ClapBack.Core;
 using ClapBack.Core.Abstractions;
@@ -24,6 +27,7 @@ public partial class App : System.Windows.Application
     private ClapBackSettings _settings = new();
     private Forms.NotifyIcon? _notifyIcon;
     private MainWindow? _mainWindow;
+    private OverlayWindow? _overlay;
     private VoiceInputController? _controller;
     private SettingsWindow? _settingsWindow;
     private Task _preparation = Task.CompletedTask;
@@ -39,9 +43,23 @@ public partial class App : System.Windows.Application
         {
             AppPaths.EnsureDirectories();
             _settings = await _settingsStore.LoadAsync(_lifetime.Token);
+            // 默认以管理员身份启动：当前进程没有提权就用 runas 重新拉起自己。
+            // 提权失败（用户点了「否」）不算错误，继续以普通权限运行。
+            if (_settings.RunAsAdministrator
+                && !e.Args.Contains("--elevated", StringComparer.OrdinalIgnoreCase)
+                && !IsElevated()
+                && TryRelaunchElevated())
+            {
+                Shutdown();
+                return;
+            }
+
             if (!HotkeyBinding.TryParse(_settings.Hotkey, out var hotkey))
             { HotkeyBinding.TryParse("CapsLock", out hotkey); _settings = _settings with { Hotkey = hotkey.Name }; }
             _mainWindow = new MainWindow(hotkey);
+            _overlay = new OverlayWindow();
+            // 拖动气泡后把新位置写回设置，下次仍从那里弹出。
+            _overlay.PositionChanged += (_, position) => { _ = SaveOverlayPositionAsync(position); };
             var recorder = new WavAudioRecorder(() => _microphones.ResolveIndex(_settings.MicrophoneDeviceId) ?? 0);
             var sender = new OverwatchTextSender(_clipboard,
                 () => _settings.ChatOpenKey.Equals("F2", StringComparison.OrdinalIgnoreCase) ? (ushort)0x71 : (ushort)0x0D,
@@ -58,6 +76,7 @@ public partial class App : System.Windows.Application
                 _mainWindow.UpdateState(state, _controller.LastTranscript, _controller.LastError);
                 if (_notifyIcon is not null) _notifyIcon.Text = state == ClapBackState.Recording
                     ? $"ClapBack：录音中，再按 {_settings.Hotkey}" : "ClapBack：" + state;
+                UpdateOverlay(state, _controller.LastTranscript, _controller.LastError);
             });
             _controller.NotificationRaised += (_, message) => Dispatcher.BeginInvoke(() => { if (!_exiting) ShowMessage(message, true); });
             _mainWindow.HotkeyPressed += async (_, _) => await HandleRecordingAsync();
@@ -162,13 +181,162 @@ public partial class App : System.Windows.Application
         try { _notifyIcon?.ShowBalloonTip(2000, "ClapBack", message, Forms.ToolTipIcon.Info); }
         catch { /* Notifications do not block recording. */ }
     }
+    private static bool IsElevated()
+    {
+        try
+        {
+            using var identity = WindowsIdentity.GetCurrent();
+            return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+        }
+        catch
+        {
+            // 拿不到令牌就当没提权：宁可多问一次 UAC，也不要假装自己已经是管理员。
+            return false;
+        }
+    }
+
+    private static bool TryRelaunchElevated()
+    {
+        var executable = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(executable))
+        {
+            return false;
+        }
+
+        try
+        {
+            var startInfo = new ProcessStartInfo(executable)
+            {
+                UseShellExecute = true,
+                Verb = "runas",
+                WorkingDirectory = AppContext.BaseDirectory,
+            };
+            // 用固定参数做标记，避免提权后的新进程再次把自己拉起来（无限循环）。
+            startInfo.ArgumentList.Add("--elevated");
+            using var process = Process.Start(startInfo);
+            return process is not null;
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        {
+            // ERROR_CANCELLED：用户在 UAC 上点了「否」。提权只是可选项，不该挡住程序。
+            MessageBox.Show("已取消管理员权限，ClapBack 将以普通权限运行（识别功能不受影响）。",
+                "ClapBack", MessageBoxButton.OK, MessageBoxImage.Information);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("无法以管理员身份重新启动：" + ex.Message + "\n将以普通权限运行。",
+                "ClapBack", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+    }
+
+    /// <summary>托盘图标直接用 exe 自带的图标，避免「托盘一个样、任务栏另一个样」。</summary>
+    private static Icon LoadAppIcon()
+    {
+        try
+        {
+            var executable = Environment.ProcessPath;
+            if (!string.IsNullOrWhiteSpace(executable))
+            {
+                var icon = Icon.ExtractAssociatedIcon(executable);
+                if (icon is not null)
+                {
+                    return icon;
+                }
+            }
+        }
+        catch
+        {
+            // 图标提取失败不能连累托盘出现。
+        }
+
+        return SystemIcons.Application;
+    }
+
+    private void UpdateOverlay(ClapBackState state, string? transcript, string? error)
+    {
+        if (_exiting || _overlay is null)
+        {
+            return;
+        }
+
+        if (!_settings.ShowOverlay)
+        {
+            _overlay.HideNow();
+            return;
+        }
+
+        switch (state)
+        {
+            case ClapBackState.Recording:
+                _overlay.ShowMessage("正在听你说…", _settings);
+                break;
+            case ClapBackState.Transcribing:
+                _overlay.ShowMessage("正在识别…", _settings);
+                break;
+            case ClapBackState.Sending:
+                _overlay.ShowMessage("正在发送到游戏…", _settings);
+                break;
+            case ClapBackState.Success when !string.IsNullOrWhiteSpace(transcript):
+                // 这是气泡的主用途：把识别结果直接摆在游戏画面上。
+                _overlay.ShowMessage(transcript, _settings);
+                break;
+            case ClapBackState.Error when !string.IsNullOrWhiteSpace(error):
+                _overlay.ShowMessage(error, _settings);
+                break;
+        }
+    }
+
+    private void ShowOverlayPreview(double fontSize, double opacity, int durationSeconds)
+    {
+        if (_exiting || _overlay is null)
+        {
+            return;
+        }
+
+        _overlay.ShowMessage("气泡预览：识别结果会这样显示", _settings with
+        {
+            OverlayFontSize = fontSize,
+            OverlayOpacity = opacity,
+            OverlayDurationSeconds = durationSeconds,
+        }, showDragHint: true);
+    }
+
+    private void ResetOverlayPosition()
+    {
+        _overlay?.HideNow();
+        _ = SaveOverlayPositionAsync(new OverlayPosition(double.NaN, double.NaN));
+    }
+
+    private async Task SaveOverlayPositionAsync(OverlayPosition position)
+    {
+        // 复位时传进来的是 NaN，落盘要写成 null（JSON 不允许 NaN）。
+        _settings = _settings with
+        {
+            OverlayLeft = double.IsNaN(position.Left) ? null : position.Left,
+            OverlayTop = double.IsNaN(position.Top) ? null : position.Top,
+        };
+        try
+        {
+            if (!_exiting)
+            {
+                await _settingsStore.SaveAsync(_settings, _lifetime.Token).ConfigureAwait(true);
+            }
+        }
+        catch
+        {
+            // 位置记不住只影响下次弹出的位置，不影响识别本身。
+        }
+    }
+
     private void CreateTrayIcon()
     {
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("打开主窗口", null, (_, _) => _mainWindow?.ShowFromTray());
         menu.Items.Add("设置与字库", null, async (_, _) => await OpenSettingsAsync());
         menu.Items.Add("退出", null, async (_, _) => await ShutdownApplicationAsync());
-        _notifyIcon = new Forms.NotifyIcon { Icon = SystemIcons.Application, Visible = true,
+        _notifyIcon = new Forms.NotifyIcon { Icon = LoadAppIcon(), Visible = true,
             Text = "ClapBack", ContextMenuStrip = menu };
         _notifyIcon.DoubleClick += (_, _) => _mainWindow?.ShowFromTray();
     }
@@ -189,7 +357,8 @@ public partial class App : System.Windows.Application
             }
             _mainWindow?.ShowFromTray();
             var key = await _credentialStore.GetAsync("ClapBack.Stt.ApiKey", _lifetime.Token) ?? string.Empty;
-            _settingsWindow = new SettingsWindow(_settings, _microphones, key, SaveSettingsAsync) { Owner = _mainWindow };
+            _settingsWindow = new SettingsWindow(_settings, _microphones, key, SaveSettingsAsync,
+                ShowOverlayPreview, ResetOverlayPosition) { Owner = _mainWindow };
             var saved = _settingsWindow.ShowDialog() == true;
             _settingsWindow = null;
             // 无论是否保存都要恢复准备：取消对话框也不能让环境停在被中断的状态。
@@ -200,6 +369,9 @@ public partial class App : System.Windows.Application
     private async Task SaveSettingsAsync(ClapBackSettings candidate, string apiKey)
     {
         if (_exiting) throw new OperationCanceledException();
+        // 气泡位置是直接拖动写进内存设置的，设置对话框里没有对应输入框；保存时用最新值覆盖，
+        // 否则「开着设置对话框拖气泡 → 点保存」会把刚拖好的位置又冲回旧值。
+        candidate = candidate with { OverlayLeft = _settings.OverlayLeft, OverlayTop = _settings.OverlayTop };
         if (!HotkeyBinding.TryParse(candidate.Hotkey, out var hotkey) || _mainWindow?.TrySetHotkey(hotkey) != true)
             throw new InvalidOperationException("热键已被占用，设置尚未应用，请选择其他按键。");
         try
@@ -232,6 +404,7 @@ public partial class App : System.Windows.Application
         finally
         {
             _notifyIcon?.Dispose();
+            _overlay?.HideNow();
             _mainWindow?.CloseForExit();
             _http.Dispose();
             _lifetime.Dispose();

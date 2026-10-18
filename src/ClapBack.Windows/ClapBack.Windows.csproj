@@ -11,7 +11,13 @@
     <Platforms>x64</Platforms>
     <AssemblyName>ClapBack</AssemblyName>
     <RootNamespace>ClapBack.Windows</RootNamespace>
+    <!-- 应用图标：既嵌进 exe 的 Win32 资源（资源管理器/托盘），也作为 WPF 资源给窗口用。
+         图标由 scripts/make-app-icon.ps1 生成，改设计就重跑那个脚本。 -->
+    <ApplicationIcon>Assets\ClapBack.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets\ClapBack.ico" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ClapBack.Core\ClapBack.Core.csproj" />
     <ProjectReference Include="..\ClapBack.Stt\ClapBack.Stt.csproj" />
