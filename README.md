@@ -4,7 +4,14 @@ Windows 语音转文字工具：按一次热键开始录音，再按一次停止
 
 ## Windows 快速开始
 
-当前 Windows 主入口是 **`ClapBack.exe`**，包含主窗口、全局热键、托盘、设置和字库编辑。本次本地发布目录为 `dist/windows-mvp/`。
+当前 Windows 主入口是 **`ClapBack.exe`**，包含主窗口、全局热键、托盘、设置和字库编辑。
+
+已发布版本从 [GitHub Releases](https://github.com/bansenbingo/clapBack/releases) 下载 `0.1.0`：
+
+- `ClapBack-0.1.0-win-x64.zip`（推荐）：解压后包含 exe 与必须放在同一目录的原生 DLL。
+- `ClapBack-0.1.0-win-x64.exe`：单独的可执行文件，仍需与 zip 中的原生 DLL 同目录才能正常显示界面。
+
+自行构建时产物输出到 `dist/windows-mvp/`。
 
 1. 双击 `dist/windows-mvp/ClapBack.exe`。请保留同目录的原生 DLL，不要单独搬走 exe。
 2. 首次启动会检查并准备本地识别运行时和模型，进度显示在主窗口底部。下载期间可以取消准备，或直接打开“设置与字库”调整网络端点、模型路径或识别模式。
@@ -119,5 +126,3 @@ macOS 使用 `sounddevice` / PortAudio 采集音频，首次运行需允许麦�
 - `ClapBack.Tests`：状态机、音频、配置、下载与功能回归测试。
 
 Windows 当前按“停止录音后单次识别”工作，尚未实现录音期间增量转写或常驻 GGUF 引擎，不承诺流式首字延迟。实际麦克风、识别速度、GPU 后端、守望先锋聊天输入和 macOS 行为需要在对应设备上验证。
-
-详细规划见 [PLAN.md](PLAN.md)。
