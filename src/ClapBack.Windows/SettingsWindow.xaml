@@ -21,8 +21,12 @@
                         <Button DockPanel.Dock="Right" Content="刷新" Click="RefreshDevicesClick" Margin="8,0,0,14"/>
                         <ComboBox x:Name="MicrophoneComboBox" DisplayMemberPath="Name"/>
                     </DockPanel>
-                    <TextBlock Text="全局热键"/><TextBox x:Name="HotkeyTextBox"/>
-                    <TextBlock Text="支持 CapsLock、F1–F24 或 Ctrl+Shift+Space 等组合；请避开游戏常用按键。" Foreground="#506880"/>
+                    <TextBlock Text="全局热键（按键盘捕获，不用手打按键名）"/>
+                    <TextBox x:Name="HotkeyTextBox" IsReadOnly="True" TextAlignment="Center"
+                             FontWeight="Bold" ToolTip="点进这里，然后直接按键盘上的按键或组合键"
+                             PreviewKeyDown="HotkeyBoxPreviewKeyDown" PreviewKeyUp="HotkeyBoxPreviewKeyUp"
+                             GotKeyboardFocus="HotkeyBoxGotKeyboardFocus" LostKeyboardFocus="HotkeyBoxLostKeyboardFocus"/>
+                    <TextBlock x:Name="HotkeyHintText" Text="点进上面的输入框，然后直接按键盘：CapsLock、Enter、Space、F1–F24 可单独使用；字母和数字需要配合 Ctrl/Alt/Shift/Win。新热键注册失败时会保留原热键。" Foreground="#506880"/>
                     <TextBlock Text="最长录音（1–300 秒，到时自动识别）" Margin="0,10,0,6"/><TextBox x:Name="MaxSecondsTextBox"/>
                     <TextBlock Text="识别语言"/><ComboBox x:Name="LanguageComboBox"/>
                     <CheckBox x:Name="AutoSendCheckBox" Content="识别后自动打开游戏聊天、粘贴并发送"/>

@@ -6,14 +6,21 @@ Windows 语音转文字工具：按一次热键开始录音，再按一次停止
 
 当前 Windows 主入口是 **`ClapBack.exe`**，包含主窗口、全局热键、托盘、设置和字库编辑。
 
-已发布版本从 [GitHub Releases](https://github.com/bansenbingo/clapBack/releases) 下载 `0.1.0`：
+从 [GitHub Releases](https://github.com/bansenbingo/clapBack/releases) 下载最新版本：`ClapBack-0.1.1-win-x64.zip`（exe + README）或 `ClapBack-0.1.1-win-x64.exe`（单文件，双击即用，两者等价）。
 
-- `ClapBack-0.1.0-win-x64.zip`（推荐）：解压后包含 exe 与必须放在同一目录的原生 DLL。
-- `ClapBack-0.1.0-win-x64.exe`：单独的可执行文件，仍需与 zip 中的原生 DLL 同目录才能正常显示界面。
+### 0.1.1 更新内容
+
+**修复**
+
+- 修复发布版单文件 `ClapBack.exe` 双击后打不开的问题：WPF/VC++ 原生 DLL 没有随单文件一起打包，程序创建窗口时抛 `DllNotFoundException` 直接退出。现在单文件 exe 可以单独运行，不再要求把原生 DLL 放在同一目录。
+
+**新增**
+
+- 热键改为按键捕获：点一下设置里的热键栏，然后直接按键盘，按键或组合键会自动填进去，不用再手打按键名。
 
 自行构建时产物输出到 `dist/windows-mvp/`。
 
-1. 双击 `dist/windows-mvp/ClapBack.exe`。请保留同目录的原生 DLL，不要单独搬走 exe。
+1. 双击 `dist/windows-mvp/ClapBack.exe`。单文件 exe 可以单独搬走，首次启动会把内置的原生运行库解压到 `%TEMP%\.net` 供后续复用。
 2. 首次启动会检查并准备本地识别运行时和模型，进度显示在主窗口底部。下载期间可以取消准备，或直接打开“设置与字库”调整网络端点、模型路径或识别模式。
 3. 在“设置与字库 → 录音与游戏”中选择麦克风、热键和最长录音时长，点击“保存并应用”。默认热键为 `CapsLock`，默认最长 30 秒。
 4. 按热键或“开始录音”，说完再按一次。到达时限也会自动停止并识别。
@@ -28,7 +35,7 @@ Windows 语音转文字工具：按一次热键开始录音，再按一次停止
 - 默认只复制文字，`AutoSend=false`。如需自动打开聊天框、粘贴并发送，在设置中显式开启，并在游戏前台使用全局热键录音。
 - 自动发送的默认目标进程为 `Overwatch,Overwatch2`，聊天键可选 Enter 或 F2。
 - 识别前应用同音替换；预览、剪贴板和发送使用同一份文本。“字库”页支持新增、修改、删除和恢复默认，点击“保存并应用”后生效。
-- 热键支持 CapsLock、F1–F24 和 Ctrl/Alt/Shift/Win 组合，例如 `Ctrl+Shift+Space`。新热键注册失败时保留原热键。
+- 热键支持 CapsLock、Enter、Space、F1–F24 和 Ctrl/Alt/Shift/Win 组合，例如 `Ctrl+Shift+Space`。设置里点一下热键栏再按键盘即可填入，不需要手打按键名。新热键注册失败时保留原热键。
 - VAD 是可选组件，未安装不会阻止短语音识别。
 - 识别结果默认去掉句末的句号（模型常补一个「。」，粘进游戏聊天框反而碍事）；问号、感叹号保留。可在“识别与下载”里关闭。
 - 最小化会收起到右下角托盘（可在“录音与游戏”里关闭这一行为）。
@@ -52,7 +59,6 @@ Windows 使用 FunASR / llama.cpp GGUF 运行时，默认模型为 SenseVoiceSma
 ```text
 windows-mvp/
     ClapBack.exe
-    *.dll                           原生运行库，随程序一起保留
     models/
         sensevoice-small-q8.gguf     默认识别模型，约 254 MB
         fsmn-vad.gguf                可选 VAD
@@ -92,11 +98,13 @@ dotnet build ClapBack.sln -c Release
 dotnet test tests/ClapBack.Tests/ClapBack.Tests.csproj -c Release
 dotnet publish src/ClapBack.Windows/ClapBack.Windows.csproj `
     -c Release -r win-x64 --self-contained true `
-    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=false `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -o dist/windows-mvp
 ```
 
-自包含发布自带 .NET 运行时，目标机器不需要另装 .NET。WPF 原生 DLL 必须随 exe 分发，运行时不依赖将它们解压到 `%TEMP%/.net`。解决方案配置为 `Any CPU`，无需向整个 solution 传 `-p:Platform=x64`。
+自包含发布自带 .NET 运行时，目标机器不需要另装 .NET。`IncludeNativeLibrariesForSelfExtract=true` 把 WPF / VC++ 原生 DLL（`wpfgfx_cor3.dll`、`PresentationNative_cor3.dll`、`D3DCompiler_47_cor3.dll`、`PenImc_cor3.dll`、`vcruntime140_cor3.dll`）一并放进单文件，运行时解压到 `%TEMP%\.net` 并复用，所以 exe 可以单独运行。若目标机器的临时目录不可写，设置环境变量 `DOTNET_BUNDLE_EXTRACT_BASE_DIR` 指向可写目录即可。
+
+不要改回 `IncludeNativeLibrariesForSelfExtract=false`：那样这些 DLL 会留在 exe 外面，只能与 exe 同目录才能加载，单独复制或下载 exe 会在创建窗口时抛 `DllNotFoundException`（0xC000041D）直接退出——这正是 0.1.0 单文件版打不开的原因。解决方案配置为 `Any CPU`，无需向整个 solution 传 `-p:Platform=x64`。
 
 ## Avalonia 桌面与 macOS 实验入口
 

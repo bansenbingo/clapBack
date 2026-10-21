@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using ClapBack.Core.Abstractions;
 using ClapBack.Core.Models;
 using ClapBack.Core.Services;
@@ -19,12 +20,15 @@ public partial class SettingsWindow : Window
     private bool _saving;
     private bool _overlayPositionReset;
     private string? _previousModelDefault;
+    private readonly string _hotkeyHintDefault;
+    private bool _winKeyDown;
 
     public SettingsWindow(ClapBackSettings settings, IAudioInputDeviceCatalog devices,
         string apiKey, Func<ClapBackSettings, string, Task> save,
         Action<double, double, int>? previewOverlay = null, Action? resetOverlayPosition = null)
     {
         InitializeComponent();
+        _hotkeyHintDefault = HotkeyHintText.Text;
         Settings = settings;
         _devices = devices;
         _save = save;
@@ -200,6 +204,106 @@ public partial class SettingsWindow : Window
         }
 
         ModelComboBox.Text = current;
+    }
+
+    /// <summary>
+    /// 热键栏改成“按键盘捕获”：按下的键直接变成热键名，避免手打 CapsLock / Ctrl+Shift+Space 出错。
+    /// 判定规则与 HotkeyBinding.TryParse 完全一致——CapsLock / Enter / Space / F1–F24 可单独使用，
+    /// 字母和数字必须带 Ctrl/Alt/Shift/Win，否则会被 TryParse 拒绝。
+    /// </summary>
+    private void HotkeyBoxGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        _winKeyDown = false;
+        HotkeyHintText.Text = _hotkeyHintDefault;
+    }
+
+    private void HotkeyBoxLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        _winKeyDown = false;
+        HotkeyHintText.Text = _hotkeyHintDefault;
+        // 热键栏只会被写成合法名字；万一不是，就退回已保存的热键，不让脏值流进 SaveClick。
+        if (!HotkeyBinding.TryParse(HotkeyTextBox.Text, out _)) HotkeyTextBox.Text = Settings.Hotkey;
+    }
+
+    private void HotkeyBoxPreviewKeyUp(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.LWin or Key.RWin) _winKeyDown = false;
+        if (IsModifierKey(key)) HotkeyHintText.Text = _hotkeyHintDefault;
+    }
+
+    private void HotkeyBoxPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key is Key.Tab or Key.Escape) return; // 留给窗口导航，别把焦点锁死在热键栏里
+        if (key is Key.LWin or Key.RWin)
+        {
+            _winKeyDown = true;
+            ShowPendingHotkey();
+            e.Handled = true;
+            return;
+        }
+
+        if (IsModifierKey(key))
+        {
+            ShowPendingHotkey();
+            e.Handled = true;
+            return;
+        }
+
+        var keyName = DescribeHotkeyKey(key);
+        if (keyName is null)
+        {
+            HotkeyHintText.Text = "这个键不能当热键：CapsLock、Enter、Space、F1–F24 可单独使用；字母和数字需要配合 Ctrl/Alt/Shift/Win。";
+            e.Handled = true;
+            return;
+        }
+
+        var candidate = string.Join('+', ModifierNames().Append(keyName));
+        if (HotkeyBinding.TryParse(candidate, out var binding))
+        {
+            HotkeyTextBox.Text = binding.Name;
+            HotkeyHintText.Text = $"已捕获 {binding.Name}；点“保存并应用”后生效，注册失败会保留原热键。";
+        }
+        else
+        {
+            HotkeyHintText.Text = $"“{candidate}”不能当热键：字母和数字需要配合 Ctrl/Alt/Shift/Win，例如 Ctrl+{keyName}。";
+        }
+
+        e.Handled = true;
+    }
+
+    private void ShowPendingHotkey()
+    {
+        var names = ModifierNames().ToList();
+        HotkeyHintText.Text = names.Count == 0
+            ? "请直接按下要使用的按键或组合键。"
+            : string.Join('+', names) + "+ … 继续按下一个键。";
+    }
+
+    private IEnumerable<string> ModifierNames()
+    {
+        var modifiers = Keyboard.Modifiers;
+        if (modifiers.HasFlag(ModifierKeys.Control)) yield return "Ctrl";
+        if (modifiers.HasFlag(ModifierKeys.Alt)) yield return "Alt";
+        if (modifiers.HasFlag(ModifierKeys.Shift)) yield return "Shift";
+        if (_winKeyDown || modifiers.HasFlag(ModifierKeys.Windows)) yield return "Win";
+    }
+
+    private static bool IsModifierKey(Key key) => key
+        is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
+        or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin;
+
+    private static string? DescribeHotkeyKey(Key key)
+    {
+        var code = (int)key;
+        if (key == Key.CapsLock) return "CapsLock";
+        if (key == Key.Enter) return "Enter";
+        if (key == Key.Space) return "Space";
+        if (code >= (int)Key.F1 && code <= (int)Key.F24) return "F" + (code - (int)Key.F1 + 1);
+        if (code >= (int)Key.A && code <= (int)Key.Z) return ((char)('A' + code - (int)Key.A)).ToString();
+        if (code >= (int)Key.D0 && code <= (int)Key.D9) return ((char)('0' + code - (int)Key.D0)).ToString();
+        return null;
     }
 
     private void RefreshProcessesClick(object sender, RoutedEventArgs e)
