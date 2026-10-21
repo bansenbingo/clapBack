@@ -2,7 +2,7 @@
   <PropertyGroup>
     <LangVersion>latest</LangVersion>
     <AnalysisLevel>latest</AnalysisLevel>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
     <!--
       不要打开 InvariantGlobalization：WPF 的 DataGrid 在行校验时会调用
       XmlLanguage.GetSpecificCulture()，去掉 ICU 后该调用抛

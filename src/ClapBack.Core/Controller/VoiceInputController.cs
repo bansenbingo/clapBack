@@ -164,7 +164,7 @@ public sealed class VoiceInputController
                 // 可能被截图、录屏或旁人看到。需要预览时打开 ShowTranscriptInNotification。
                 NotificationRaised?.Invoke(this, settings.ShowTranscriptInNotification
                     ? $"已复制到剪贴板：{text}"
-                    : $"已复制到剪贴板（{text.Length} 字），在游戏中按 Ctrl+V 粘贴");
+                    : $"已复制到剪贴板，{text.Length} 字，在游戏中按 Ctrl+V 粘贴");
                 return;
             }
 
@@ -206,7 +206,7 @@ public sealed class VoiceInputController
             {
                 if (cancellationToken.IsCancellationRequested || State != ClapBackState.Recording)
                     return;
-                NotificationRaised?.Invoke(this, $"已达到最长录音时长（{seconds} 秒）");
+                NotificationRaised?.Invoke(this, $"已达到最长录音时长：{seconds} 秒");
                 await StopTranscribeAndSendAsync(CancellationToken.None).ConfigureAwait(false);
             }
             finally { _gate.Release(); }

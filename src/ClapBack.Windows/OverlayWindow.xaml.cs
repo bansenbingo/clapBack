@@ -68,7 +68,7 @@ public partial class OverlayWindow : Window
     {
         ApplySettings(settings);
         BubbleText.Text = text;
-        HintText.Visibility = showDragHint ? Visibility.Visible : Visibility.Collapsed;
+        Bubble.ToolTip = showDragHint ? "按住拖动可以调整气泡位置，位置会自动记住" : null;
 
         if (!IsVisible)
         {
@@ -189,7 +189,6 @@ public partial class OverlayWindow : Window
         }
 
         ClampToScreen();
-        HintText.Visibility = Visibility.Collapsed;
         PositionChanged?.Invoke(this, new OverlayPosition(Left, Top));
     }
 

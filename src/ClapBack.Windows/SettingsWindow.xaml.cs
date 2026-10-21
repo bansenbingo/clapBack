@@ -20,15 +20,14 @@ public partial class SettingsWindow : Window
     private bool _saving;
     private bool _overlayPositionReset;
     private string? _previousModelDefault;
-    private readonly string _hotkeyHintDefault;
     private bool _winKeyDown;
+    private bool _hotkeyHintIsPending;
 
     public SettingsWindow(ClapBackSettings settings, IAudioInputDeviceCatalog devices,
         string apiKey, Func<ClapBackSettings, string, Task> save,
         Action<double, double, int>? previewOverlay = null, Action? resetOverlayPosition = null)
     {
         InitializeComponent();
-        _hotkeyHintDefault = HotkeyHintText.Text;
         Settings = settings;
         _devices = devices;
         _save = save;
@@ -163,12 +162,12 @@ public partial class SettingsWindow : Window
     {
         var options = new (string Code, string Display)[]
         {
-            ("zh", "中文（zh）"),
-            ("en", "英语（en）"),
-            ("ja", "日语（ja）"),
-            ("ko", "韩语（ko）"),
-            ("yue", "粤语（yue）"),
-            ("auto", "自动检测（auto）"),
+            ("zh", "中文"),
+            ("en", "英语"),
+            ("ja", "日语"),
+            ("ko", "韩语"),
+            ("yue", "粤语"),
+            ("auto", "自动检测"),
         };
 
         LanguageComboBox.Items.Clear();
@@ -186,7 +185,7 @@ public partial class SettingsWindow : Window
         if (selected is null && !string.IsNullOrWhiteSpace(current))
         {
             // 配置里是自定义语言码：保留下来，不能因为下拉里没有就把用户的设置吞掉。
-            selected = new ComboBoxItem { Content = current + "（当前配置）", Tag = current };
+            selected = new ComboBoxItem { Content = current, Tag = current };
             LanguageComboBox.Items.Add(selected);
         }
 
@@ -207,29 +206,29 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// 热键栏改成“按键盘捕获”：按下的键直接变成热键名，避免手打 CapsLock / Ctrl+Shift+Space 出错。
+    /// 热键栏同时支持两种输入：直接按组合键捕获，或手动输入按键名（CapsLock、F8、Ctrl+Shift+Space）。
     /// 判定规则与 HotkeyBinding.TryParse 完全一致——CapsLock / Enter / Space / F1–F24 可单独使用，
-    /// 字母和数字必须带 Ctrl/Alt/Shift/Win，否则会被 TryParse 拒绝。
+    /// 字母和数字必须带 Ctrl/Alt/Shift/Win。
+    /// 只有「明显是在设置热键」的按键才会被抢过来；手打字时（含用 Shift 打大写）一律放行。
     /// </summary>
     private void HotkeyBoxGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         _winKeyDown = false;
-        HotkeyHintText.Text = _hotkeyHintDefault;
+        ClearHotkeyHint();
     }
 
     private void HotkeyBoxLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         _winKeyDown = false;
-        HotkeyHintText.Text = _hotkeyHintDefault;
-        // 热键栏只会被写成合法名字；万一不是，就退回已保存的热键，不让脏值流进 SaveClick。
-        if (!HotkeyBinding.TryParse(HotkeyTextBox.Text, out _)) HotkeyTextBox.Text = Settings.Hotkey;
+        ClearHotkeyHint();
     }
 
     private void HotkeyBoxPreviewKeyUp(object sender, System.Windows.Input.KeyEventArgs e)
     {
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (key is Key.LWin or Key.RWin) _winKeyDown = false;
-        if (IsModifierKey(key)) HotkeyHintText.Text = _hotkeyHintDefault;
+        // 松开修饰键时清掉「还差一个键」的临时提示；已捕获成功的提示留到下一次输入。
+        if (IsModifierKey(key) && _hotkeyHintIsPending) ClearHotkeyHint();
     }
 
     private void HotkeyBoxPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -251,11 +250,20 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        // 抓取条件：带了 Ctrl/Alt/Win 这类强修饰键，或按的是打字时用不到、本身就能当热键的键。
+        // 只按 Shift（例如手打大写字母）或什么都不按的字母数字一律当普通输入，否则手打 CapsLock、F8 会被抢走。
+        var strongModifier = _winKeyDown
+            || (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) != 0;
+        if (!strongModifier && !IsStandaloneHotkeyKey(key))
+        {
+            ClearHotkeyHint();
+            return;
+        }
+
         var keyName = DescribeHotkeyKey(key);
         if (keyName is null)
         {
-            HotkeyHintText.Text = "这个键不能当热键：CapsLock、Enter、Space、F1–F24 可单独使用；字母和数字需要配合 Ctrl/Alt/Shift/Win。";
-            e.Handled = true;
+            ClearHotkeyHint();
             return;
         }
 
@@ -263,22 +271,38 @@ public partial class SettingsWindow : Window
         if (HotkeyBinding.TryParse(candidate, out var binding))
         {
             HotkeyTextBox.Text = binding.Name;
-            HotkeyHintText.Text = $"已捕获 {binding.Name}；点“保存并应用”后生效，注册失败会保留原热键。";
-        }
-        else
-        {
-            HotkeyHintText.Text = $"“{candidate}”不能当热键：字母和数字需要配合 Ctrl/Alt/Shift/Win，例如 Ctrl+{keyName}。";
+            HotkeyTextBox.CaretIndex = HotkeyTextBox.Text.Length;
+            SetHotkeyHint($"已捕获 {binding.Name}");
+            _hotkeyHintIsPending = false;
+            e.Handled = true;
+            return;
         }
 
-        e.Handled = true;
+        // 组合本身不合法：不拦截，让它作为文本正常输入，手动敲 Ctrl+Shift+Space 这类名字照样能用。
+        ClearHotkeyHint();
     }
 
     private void ShowPendingHotkey()
     {
         var names = ModifierNames().ToList();
-        HotkeyHintText.Text = names.Count == 0
+        SetHotkeyHint(names.Count == 0
             ? "请直接按下要使用的按键或组合键。"
-            : string.Join('+', names) + "+ … 继续按下一个键。";
+            : string.Join('+', names) + "+ … 继续按下一个键。");
+        _hotkeyHintIsPending = true;
+    }
+
+    /// <summary>提示行平时折叠，避免在设置界面里留一条空白；只有捕获反馈时才占位。</summary>
+    private void SetHotkeyHint(string text)
+    {
+        HotkeyHintText.Text = text;
+        HotkeyHintText.Visibility = Visibility.Visible;
+    }
+
+    private void ClearHotkeyHint()
+    {
+        HotkeyHintText.Text = string.Empty;
+        HotkeyHintText.Visibility = Visibility.Collapsed;
+        _hotkeyHintIsPending = false;
     }
 
     private IEnumerable<string> ModifierNames()
@@ -288,6 +312,14 @@ public partial class SettingsWindow : Window
         if (modifiers.HasFlag(ModifierKeys.Alt)) yield return "Alt";
         if (modifiers.HasFlag(ModifierKeys.Shift)) yield return "Shift";
         if (_winKeyDown || modifiers.HasFlag(ModifierKeys.Windows)) yield return "Win";
+    }
+
+    /// <summary>这些键本身就能当热键，而且手打按键名时不会真的去按它们。</summary>
+    private static bool IsStandaloneHotkeyKey(Key key)
+    {
+        var code = (int)key;
+        return key is Key.CapsLock or Key.Enter or Key.Space
+            || (code >= (int)Key.F1 && code <= (int)Key.F24);
     }
 
     private static bool IsModifierKey(Key key) => key
@@ -409,7 +441,7 @@ public partial class SettingsWindow : Window
             var selected = devices.FirstOrDefault(device => device.Id == selectedId);
             if (selected is null && selectedId.Length > 0)
             {
-                selected = new(selectedId, $"{selectedId}（未连接，录音时回退默认）", -1);
+                selected = new(selectedId, $"{selectedId} 未连接", -1);
                 devices.Add(selected);
             }
             MicrophoneComboBox.ItemsSource = devices;

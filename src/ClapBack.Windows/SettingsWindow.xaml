@@ -18,102 +18,146 @@
             <TabItem Header="录音与游戏">
                 <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="20">
                     <TextBlock Text="麦克风"/><DockPanel>
-                        <Button DockPanel.Dock="Right" Content="刷新" Click="RefreshDevicesClick" Margin="8,0,0,14"/>
-                        <ComboBox x:Name="MicrophoneComboBox" DisplayMemberPath="Name"/>
+                        <Button DockPanel.Dock="Right" Content="刷新" Click="RefreshDevicesClick" Margin="8,0,0,14"
+                                ToolTip="重新枚举本机麦克风。"/>
+                        <ComboBox x:Name="MicrophoneComboBox" DisplayMemberPath="Name"
+                                  ToolTip="选择录音用的麦克风。插拔设备后点“刷新”重新枚举。"/>
                     </DockPanel>
-                    <TextBlock Text="全局热键（按键盘捕获，不用手打按键名）"/>
-                    <TextBox x:Name="HotkeyTextBox" IsReadOnly="True" TextAlignment="Center"
-                             FontWeight="Bold" ToolTip="点进这里，然后直接按键盘上的按键或组合键"
+                    <TextBlock Text="热键设置"/>
+                    <TextBox x:Name="HotkeyTextBox" TextAlignment="Center" FontWeight="Bold"
                              PreviewKeyDown="HotkeyBoxPreviewKeyDown" PreviewKeyUp="HotkeyBoxPreviewKeyUp"
-                             GotKeyboardFocus="HotkeyBoxGotKeyboardFocus" LostKeyboardFocus="HotkeyBoxLostKeyboardFocus"/>
-                    <TextBlock x:Name="HotkeyHintText" Text="点进上面的输入框，然后直接按键盘：CapsLock、Enter、Space、F1–F24 可单独使用；字母和数字需要配合 Ctrl/Alt/Shift/Win。新热键注册失败时会保留原热键。" Foreground="#506880"/>
-                    <TextBlock Text="最长录音（1–300 秒，到时自动识别）" Margin="0,10,0,6"/><TextBox x:Name="MaxSecondsTextBox"/>
-                    <TextBlock Text="识别语言"/><ComboBox x:Name="LanguageComboBox"/>
-                    <CheckBox x:Name="AutoSendCheckBox" Content="识别后自动打开游戏聊天、粘贴并发送"/>
-                    <TextBlock Text="默认只复制文字，你在聊天框按 Ctrl+V。开启自动发送时，用全局热键在游戏中录音。" Foreground="#506880"/>
-                    <TextBlock Text="自动发送的目标进程（从本机正在运行的窗口程序里选）" Margin="0,10,0,6"/>
+                             GotKeyboardFocus="HotkeyBoxGotKeyboardFocus" LostKeyboardFocus="HotkeyBoxLostKeyboardFocus"
+                             ToolTip="两种方式都行：直接按 Ctrl/Alt/Shift/Win 组合键自动捕获，或手动输入按键名，例如 CapsLock、Enter、Space、F8、Ctrl+Shift+Space。字母和数字要配合 Ctrl/Alt/Shift/Win；新热键注册失败会保留原热键。"/>
+                    <TextBlock x:Name="HotkeyHintText" Text="" Visibility="Collapsed" Foreground="#506880"/>
+                    <TextBlock Text="最长录音" Margin="0,10,0,6"/>
+                    <TextBox x:Name="MaxSecondsTextBox" ToolTip="1–300 秒。到时自动停止录音并开始识别。"/>
+                    <TextBlock Text="识别语言"/>
+                    <ComboBox x:Name="LanguageComboBox" ToolTip="识别使用的语言；选“自动检测”由模型自行判断。"/>
+                    <CheckBox x:Name="AutoSendCheckBox" Content="识别后自动打开游戏聊天、粘贴并发送"
+                              ToolTip="默认只复制文字，你在聊天框按 Ctrl+V。开启后会自动打开游戏聊天、粘贴并发送，这时请用全局热键在游戏中录音。"/>
+                    <TextBlock Text="自动发送的目标进程" Margin="0,10,0,6"/>
                     <DockPanel Margin="0,0,0,10">
-                        <Button DockPanel.Dock="Right" Content="刷新列表" Click="RefreshProcessesClick" Margin="8,0,0,0"/>
-                        <ComboBox x:Name="TargetProcessComboBox"/>
+                        <Button DockPanel.Dock="Right" Content="刷新列表" Click="RefreshProcessesClick" Margin="8,0,0,0"
+                                ToolTip="重新枚举本机当前有窗口的进程。"/>
+                        <ComboBox x:Name="TargetProcessComboBox"
+                                  ToolTip="列表来自本机当前有窗口的进程，先列出 Overwatch / Overwatch2。"/>
                     </DockPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                        <Button Content="添加所选进程" Click="AddTargetProcessClick"/>
-                        <Button Content="清空" Click="ClearTargetProcessesClick"/>
+                        <Button Content="添加所选进程" Click="AddTargetProcessClick"
+                                ToolTip="把下拉里选中的进程加入白名单。"/>
+                        <Button Content="清空" Click="ClearTargetProcessesClick"
+                                ToolTip="清空白名单；开启自动发送前需要重新填写。"/>
                     </StackPanel>
-                    <TextBlock Text="最终使用的进程白名单（逗号分隔，可直接编辑）"/>
-                    <TextBox x:Name="TargetProcessesTextBox"/>
-                    <TextBlock Text="打开聊天的按键"/><ComboBox x:Name="ChatKeyComboBox"><ComboBoxItem Content="Enter"/><ComboBoxItem Content="F2"/></ComboBox>
+                    <TextBlock Text="进程白名单"/>
+                    <TextBox x:Name="TargetProcessesTextBox"
+                             ToolTip="逗号分隔，可直接编辑。只有这里列出的进程才会被自动发送。"/>
+                    <TextBlock Text="打开聊天的按键"/>
+                    <ComboBox x:Name="ChatKeyComboBox" ToolTip="自动发送时用来打开游戏聊天的按键。">
+                        <ComboBoxItem Content="Enter"/><ComboBoxItem Content="F2"/>
+                    </ComboBox>
                     <CheckBox x:Name="RestoreClipboardCheckBox" Content="自动发送后恢复发送前的剪贴板" IsEnabled="False" Visibility="Collapsed"/>
-                    <CheckBox x:Name="TranscriptNotificationCheckBox" Content="在通知气泡中显示识别文字"/>
-                    <CheckBox x:Name="MinimizeToTrayCheckBox" Content="最小化时收起到托盘（右下角）运行"/>
-                    <CheckBox x:Name="RunAsAdministratorCheckBox" Content="启动时以管理员身份运行（会弹 UAC 提权框）"/>
+                    <CheckBox x:Name="TranscriptNotificationCheckBox" Content="在通知气泡中显示识别文字"
+                              ToolTip="识别完成后在右下角通知气泡里显示识别文字。"/>
+                    <CheckBox x:Name="MinimizeToTrayCheckBox" Content="最小化时收起到托盘运行"
+                              ToolTip="开启后最小化会收起到托盘运行。"/>
+                    <CheckBox x:Name="RunAsAdministratorCheckBox" Content="启动时以管理员身份运行"
+                              ToolTip="启动时会弹 UAC 提权框；点“否”则以普通权限继续运行。"/>
                 </StackPanel></ScrollViewer>
             </TabItem>
             <TabItem Header="识别与下载">
                 <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="20">
-                    <TextBlock Text="识别模式"/><ComboBox x:Name="TranscriptionModeComboBox">
-                        <ComboBoxItem Content="本地优先（失败时上传云端）"/><ComboBoxItem Content="仅本地（不上传音频）"/><ComboBoxItem Content="仅云端（上传音频）"/>
+                    <TextBlock Text="识别模式"/>
+                    <ComboBox x:Name="TranscriptionModeComboBox"
+                              ToolTip="仅本地不会上传音频；本地优先只在本地识别失败时上传；仅云端总是上传。云端服务需支持 Whisper 兼容转写接口。">
+                        <ComboBoxItem Content="本地优先"/><ComboBoxItem Content="仅本地"/><ComboBoxItem Content="仅云端"/>
                     </ComboBox>
-                    <CheckBox x:Name="TrimTrailingPunctuationCheckBox" Content="去掉识别结果句末的句号"/>
-                    <TextBlock Text="本地模型"/><ComboBox x:Name="LocalModelVariantComboBox" DisplayMemberPath="DisplayName" SelectionChanged="ModelChanged"/>
-                    <CheckBox x:Name="AutoProvisionCheckBox" Content="启动及设置变更后自动准备缺失组件"/>
-                    <TextBlock Text="本地运行时路径（相对程序目录）"/><TextBox x:Name="LocalRuntimeTextBox"/>
-                    <TextBlock Text="模型路径（相对程序目录）"/><TextBox x:Name="LocalModelTextBox"/>
-                    <TextBlock Text="VAD 路径（短语音可不安装）"/><TextBox x:Name="LocalVadModelTextBox"/>
-                    <CheckBox x:Name="InstallVadCheckBox" Content="准备环境时安装可选 VAD 模型"/>
-                    <TextBlock Text="推理后端"/><ComboBox x:Name="LocalBackendComboBox"><ComboBoxItem Content="CPU" Tag="cpu"/><ComboBoxItem Content="Vulkan" Tag="vulkan"/><ComboBoxItem Content="CUDA" Tag="cuda"/></ComboBox>
-                    <TextBlock Text="线程数（1–64）"/><TextBox x:Name="LocalThreadsTextBox"/>
-                    <TextBlock Text="识别超时（1–300 秒）"/><TextBox x:Name="LocalTimeoutTextBox"/>
-                    <Expander Header="下载端点（网络不可用时调整）"><StackPanel Margin="0,12,0,0">
-                        <TextBlock Text="Hugging Face 兼容端点（留空用默认镜像）"/><TextBox x:Name="HuggingFaceEndpointTextBox"/>
-                        <TextBlock Text="运行时下载端点（留空用 GitHub）"/><TextBox x:Name="RuntimeEndpointTextBox"/>
-                    </StackPanel></Expander>
+                    <CheckBox x:Name="TrimTrailingPunctuationCheckBox" Content="去掉识别结果句末的句号"
+                              ToolTip="模型常补一个句号，粘进游戏聊天框反而碍事；问号、感叹号保留。"/>
+                    <TextBlock Text="本地模型"/>
+                    <ComboBox x:Name="LocalModelVariantComboBox" DisplayMemberPath="DisplayName" SelectionChanged="ModelChanged"
+                              ToolTip="选择要下载并使用的本地识别模型。"/>
+                    <CheckBox x:Name="AutoProvisionCheckBox" Content="启动及设置变更后自动准备缺失组件"
+                              ToolTip="启动及设置变更后自动下载缺失的运行时、模型和 VAD。"/>
+                    <TextBlock Text="本地运行时路径"/>
+                    <TextBox x:Name="LocalRuntimeTextBox" ToolTip="相对 exe 所在目录。"/>
+                    <TextBlock Text="模型路径"/>
+                    <TextBox x:Name="LocalModelTextBox" ToolTip="相对 exe 所在目录。"/>
+                    <TextBlock Text="VAD 路径"/>
+                    <TextBox x:Name="LocalVadModelTextBox" ToolTip="相对 exe 所在目录；短语音可以不安装。"/>
+                    <CheckBox x:Name="InstallVadCheckBox" Content="准备环境时安装可选 VAD 模型"
+                              ToolTip="VAD 用于切分长语音，属于可选组件。"/>
+                    <TextBlock Text="推理后端"/>
+                    <ComboBox x:Name="LocalBackendComboBox" ToolTip="CPU 最稳；Vulkan / CUDA 需要匹配的显卡驱动。">
+                        <ComboBoxItem Content="CPU" Tag="cpu"/><ComboBoxItem Content="Vulkan" Tag="vulkan"/><ComboBoxItem Content="CUDA" Tag="cuda"/>
+                    </ComboBox>
+                    <TextBlock Text="线程数"/>
+                    <TextBox x:Name="LocalThreadsTextBox" ToolTip="1–64。"/>
+                    <TextBlock Text="识别超时"/>
+                    <TextBox x:Name="LocalTimeoutTextBox" ToolTip="1–300 秒，超过就放弃本次本地识别。"/>
+                    <Expander Header="下载端点" ToolTip="下载失败时在这里改用镜像或自己的端点。">
+                        <StackPanel Margin="0,12,0,0">
+                            <TextBlock Text="Hugging Face 兼容端点"/>
+                            <TextBox x:Name="HuggingFaceEndpointTextBox" ToolTip="留空用默认镜像。"/>
+                            <TextBlock Text="运行时下载端点"/>
+                            <TextBox x:Name="RuntimeEndpointTextBox" ToolTip="留空用 GitHub。"/>
+                        </StackPanel>
+                    </Expander>
                 </StackPanel></ScrollViewer>
             </TabItem>
             <TabItem Header="云端">
                 <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="20">
-                    <TextBlock Text="只有选择仅云端或本地优先时才会上传录音。服务需支持 Whisper 兼容转写接口。" Foreground="#506880" Margin="0,0,0,20"/>
-                    <TextBlock Text="服务 URL（以 /v1 结尾）"/><TextBox x:Name="BaseUrlTextBox"/>
-                    <TextBlock Text="模型名称（可从常用名称里选，也可直接输入）"/>
-                    <ComboBox x:Name="ModelComboBox" IsEditable="True"/>
-                    <TextBlock Text="API Key（保存在 Windows 凭据管理器）"/>
-                    <PasswordBox x:Name="ApiKeyBox" Padding="8,6" Margin="0,0,0,14"/>
-                    <TextBlock Text="已有密钥加载后可直接保存；清空输入会删除密钥。" Foreground="#506880"/>
+                    <TextBlock Text="服务 URL"/>
+                    <TextBox x:Name="BaseUrlTextBox" ToolTip="以 /v1 结尾，例如 https://api.openai.com/v1。"/>
+                    <TextBlock Text="模型名称"/>
+                    <ComboBox x:Name="ModelComboBox" IsEditable="True"
+                              ToolTip="可从常用名称里选，也可以直接输入。"/>
+                    <TextBlock Text="API Key"/>
+                    <PasswordBox x:Name="ApiKeyBox" Padding="8,6" Margin="0,0,0,14"
+                                 ToolTip="保存在 Windows 凭据管理器。加载已有密钥后可直接保存；清空输入会删除密钥。"/>
                 </StackPanel></ScrollViewer>
             </TabItem>
             <TabItem Header="游戏气泡">
                 <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="20">
-                    <CheckBox x:Name="ShowOverlayCheckBox" Content="识别时在游戏画面上显示字符气泡"/>
-                    <TextBlock Text="气泡是一个置顶、半透明的小窗，只显示识别结果，不会抢走游戏的键盘焦点。" Foreground="#506880"/>
-                    <TextBlock Text="字号（12–72）" Margin="0,10,0,6"/><TextBox x:Name="OverlayFontSizeTextBox"/>
-                    <TextBlock Text="不透明度（0.2–1.0）" Margin="0,10,0,6"/><TextBox x:Name="OverlayOpacityTextBox"/>
-                    <TextBlock Text="显示时长（1–60 秒）" Margin="0,10,0,6"/><TextBox x:Name="OverlayDurationTextBox"/>
+                    <CheckBox x:Name="ShowOverlayCheckBox" Content="识别时在游戏画面上显示字符气泡"
+                              ToolTip="气泡是一个置顶、半透明的小窗，只显示识别结果，不会抢走游戏的键盘焦点。"/>
+                    <TextBlock Text="字号" Margin="0,10,0,6"/>
+                    <TextBox x:Name="OverlayFontSizeTextBox" ToolTip="12–72。"/>
+                    <TextBlock Text="不透明度" Margin="0,10,0,6"/>
+                    <TextBox x:Name="OverlayOpacityTextBox" ToolTip="0.2–1.0。"/>
+                    <TextBlock Text="显示时长" Margin="0,10,0,6"/>
+                    <TextBox x:Name="OverlayDurationTextBox" ToolTip="1–60 秒。"/>
                     <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                        <Button Content="预览气泡" Click="PreviewOverlayClick"/>
-                        <Button Content="气泡位置复位" Click="ResetOverlayPositionClick"/>
+                        <Button Content="预览气泡" Click="PreviewOverlayClick"
+                                ToolTip="先看一眼气泡的样子，再决定字号和透明度。"/>
+                        <Button Content="气泡位置复位" Click="ResetOverlayPositionClick"
+                                ToolTip="回到屏幕底部居中。平时直接把气泡拖到想要的位置即可，位置会自动记住。"/>
                     </StackPanel>
-                    <TextBlock Text="直接把气泡拖到想要的位置即可：位置会自动记住，下次仍从那里弹出。" Foreground="#506880" Margin="0,12,0,0"/>
                 </StackPanel></ScrollViewer>
             </TabItem>
             <TabItem Header="字库">
                 <Grid Margin="16">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <CheckBox x:Name="HomophoneCheckBox" Content="识别后应用同音替换"/>
-                    <TextBlock Grid.Row="1" Text="每行一条规则；候选用逗号分隔。结果会随机选择一个候选，再复制或发送。" Foreground="#506880"/>
-                    <DataGrid x:Name="DictionaryGrid" Grid.Row="2" AutoGenerateColumns="False" CanUserAddRows="True" CanUserDeleteRows="True" Margin="0,8,0,12" HeadersVisibility="Column" SelectionMode="Single">
+                    <CheckBox x:Name="HomophoneCheckBox" Content="识别后应用同音替换"
+                              ToolTip="识别后按字库做同音替换；预览、剪贴板和发送使用同一份文本。"/>
+                    <DataGrid x:Name="DictionaryGrid" Grid.Row="1" Grid.RowSpan="2" AutoGenerateColumns="False" CanUserAddRows="True" CanUserDeleteRows="True" Margin="0,8,0,12" HeadersVisibility="Column" SelectionMode="Single"
+                              ToolTip="每行一条规则；候选用逗号分隔。结果会随机选择一个候选，再复制或发送。">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="原词" Binding="{Binding Source, UpdateSourceTrigger=PropertyChanged}" Width="150"/>
-                            <DataGridTextColumn Header="替换候选（逗号分隔）" Binding="{Binding Alternatives, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                            <DataGridTextColumn Header="替换候选" Binding="{Binding Alternatives, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
                         </DataGrid.Columns>
                     </DataGrid>
-                    <StackPanel Grid.Row="3" Orientation="Horizontal"><Button Content="删除选中规则" Click="DeleteEntryClick"/><Button Content="恢复默认字库" Click="ResetDictionaryClick"/></StackPanel>
+                    <StackPanel Grid.Row="3" Orientation="Horizontal">
+                        <Button Content="删除选中规则" Click="DeleteEntryClick" ToolTip="删除当前选中的规则行。"/>
+                        <Button Content="恢复默认字库" Click="ResetDictionaryClick" ToolTip="恢复内置的默认字库规则。"/>
+                    </StackPanel>
                 </Grid>
             </TabItem>
         </TabControl>
         <TextBlock x:Name="ErrorText" Grid.Row="1" Foreground="#A33C2C" Margin="0,12,0,8"/>
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="取消" Click="CancelClick"/>
-            <Button x:Name="SaveButton" Content="保存并应用" Click="SaveClick" Background="#2466AC" Foreground="White" Margin="0"/>
+            <Button x:Name="SaveButton" Content="保存并应用" Click="SaveClick" Background="#2466AC" Foreground="White" Margin="0"
+                    ToolTip="保存并应用设置；热键注册失败时会保留原热键。"/>
         </StackPanel>
     </Grid>
 </Window>

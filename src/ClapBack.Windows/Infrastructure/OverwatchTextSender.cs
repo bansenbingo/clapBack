@@ -60,7 +60,7 @@ public sealed class OverwatchTextSender : ITextSender, ITargetWindowAware
         if (settings.RequireTargetWindowMatch && allowedNames.Count == 0)
         {
             throw new InvalidOperationException(
-                "目标窗口白名单为空，拒绝发送文本。请在设置 TargetWindowProcessNames 中填入允许注入的进程名（例如 Overwatch,Overwatch2）。");
+                "目标窗口白名单为空，拒绝发送文本。请在设置 TargetWindowProcessNames 中填入允许注入的进程名，例如 Overwatch,Overwatch2。");
         }
 
         if (_targetWindow != IntPtr.Zero && !SetForegroundWindow(_targetWindow))
@@ -75,7 +75,7 @@ public sealed class OverwatchTextSender : ITextSender, ITargetWindowAware
         if (!IsAllowed(current, allowedNames, settings.RequireTargetWindowMatch))
         {
             throw new InvalidOperationException(
-                $"前台窗口不是目标进程（当前：{DescribeProcess(current)}），已取消发送，未注入任何按键。");
+                $"前台窗口不是目标进程，当前：{DescribeProcess(current)}。已取消发送，未注入任何按键。");
         }
 
         var snapshot = await _clipboard.CaptureAsync(cancellationToken).ConfigureAwait(false);

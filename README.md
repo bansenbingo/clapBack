@@ -6,17 +6,17 @@ Windows 语音转文字工具：按一次热键开始录音，再按一次停止
 
 当前 Windows 主入口是 **`ClapBack.exe`**，包含主窗口、全局热键、托盘、设置和字库编辑。
 
-从 [GitHub Releases](https://github.com/bansenbingo/clapBack/releases) 下载最新版本：`ClapBack-0.1.1-win-x64.zip`（exe + README）或 `ClapBack-0.1.1-win-x64.exe`（单文件，双击即用，两者等价）。
+从 [GitHub Releases](https://github.com/bansenbingo/clapBack/releases) 下载最新版本：`ClapBack-0.1.2-win-x64.zip`（exe + README）或 `ClapBack-0.1.2-win-x64.exe`（单文件，双击即用，两者等价）。
 
-### 0.1.1 更新内容
+### 0.1.2 更新内容
 
 **修复**
 
-- 修复发布版单文件 `ClapBack.exe` 双击后打不开的问题：WPF/VC++ 原生 DLL 没有随单文件一起打包，程序创建窗口时抛 `DllNotFoundException` 直接退出。现在单文件 exe 可以单独运行，不再要求把原生 DLL 放在同一目录。
+- 热键栏上一版只能按键捕获，无法再手动输入按键名；现在两种方式都支持，新热键注册失败时仍会保留原热键。
 
 **新增**
 
-- 热键改为按键捕获：点一下设置里的热键栏，然后直接按键盘，按键或组合键会自动填进去，不用再手打按键名。
+- 设置界面与主界面只保留标签，说明性文字全部改为鼠标悬停到对应输入框时显示，并去掉了文案里多余的括号。
 
 自行构建时产物输出到 `dist/windows-mvp/`。
 
@@ -35,7 +35,7 @@ Windows 语音转文字工具：按一次热键开始录音，再按一次停止
 - 默认只复制文字，`AutoSend=false`。如需自动打开聊天框、粘贴并发送，在设置中显式开启，并在游戏前台使用全局热键录音。
 - 自动发送的默认目标进程为 `Overwatch,Overwatch2`，聊天键可选 Enter 或 F2。
 - 识别前应用同音替换；预览、剪贴板和发送使用同一份文本。“字库”页支持新增、修改、删除和恢复默认，点击“保存并应用”后生效。
-- 热键支持 CapsLock、Enter、Space、F1–F24 和 Ctrl/Alt/Shift/Win 组合，例如 `Ctrl+Shift+Space`。设置里点一下热键栏再按键盘即可填入，不需要手打按键名。新热键注册失败时保留原热键。
+- 热键支持 CapsLock、Enter、Space、F1–F24 和 Ctrl/Alt/Shift/Win 组合，例如 `Ctrl+Shift+Space`。设置里点一下热键栏再按键盘即可填入，也可以手动输入按键名。新热键注册失败时保留原热键。
 - VAD 是可选组件，未安装不会阻止短语音识别。
 - 识别结果默认去掉句末的句号（模型常补一个「。」，粘进游戏聊天框反而碍事）；问号、感叹号保留。可在“识别与下载”里关闭。
 - 最小化会收起到右下角托盘（可在“录音与游戏”里关闭这一行为）。

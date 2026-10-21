@@ -219,7 +219,7 @@ public partial class App : System.Windows.Application
         catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
         {
             // ERROR_CANCELLED：用户在 UAC 上点了「否」。提权只是可选项，不该挡住程序。
-            MessageBox.Show("已取消管理员权限，ClapBack 将以普通权限运行（识别功能不受影响）。",
+            MessageBox.Show("已取消管理员权限，ClapBack 将以普通权限继续运行，识别功能不受影响。",
                 "ClapBack", MessageBoxButton.OK, MessageBoxImage.Information);
             return false;
         }

@@ -101,8 +101,8 @@ public sealed class CompositeTranscriptionProvider : ITranscriptionProvider
         }
 
         _onCloudUpload?.Invoke(localWasSilent
-            ? "本地识别返回空结果，按设置(FallbackOnEmptyResult)回退云端，音频将上传。"
-            : $"本地识别失败（{Describe(localError)}），按 LocalFirst 设置回退云端，音频将上传。");
+            ? "本地识别返回空结果，已按 FallbackOnEmptyResult 设置回退云端，音频将上传。"
+            : $"本地识别失败：{Describe(localError)}。已按 LocalFirst 设置回退云端，音频将上传。");
 
         try
         {

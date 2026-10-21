@@ -49,14 +49,19 @@ public partial class MainWindow : Window
     {
         _minimizeToTray = settings.MinimizeToTray;
         _maxSeconds = Math.Clamp(settings.MaxRecordingSeconds, 1, 300);
-        HotkeyText.Text = $"{_hotkey.Name} 开始 / 结束录音，最长 {_maxSeconds} 秒";
-        ModeText.Text = settings.TranscriptionMode switch
+        // 界面上只留最短的标识，具体说明放在悬停提示里。
+        HotkeyText.Text = _hotkey.Name;
+        HotkeyText.ToolTip = $"按 {_hotkey.Name} 开始或结束录音，最长 {_maxSeconds} 秒。";
+        var (modeName, modeDetail) = settings.TranscriptionMode switch
         {
-            TranscriptionMode.CloudOnly => "仅云端识别：录音将上传到设置中的服务。",
-            TranscriptionMode.LocalFirst => "本地优先：本地失败时上传云端。",
-            _ => "仅本地识别，默认复制文字后在游戏中按 Ctrl+V。"
+            TranscriptionMode.CloudOnly => ("仅云端", "录音会上传到设置里的云端服务。"),
+            TranscriptionMode.LocalFirst => ("本地优先", "先在本机识别，本地失败时再上传云端。"),
+            _ => ("仅本地", "只在本机识别，不上传音频。")
         };
-        if (settings.AutoSend) ModeText.Text += " 已开启游戏自动发送。";
+        ModeText.Text = settings.AutoSend ? modeName + " · 自动发送" : modeName;
+        ModeText.ToolTip = settings.AutoSend
+            ? modeDetail + "已开启游戏自动发送：会自动打开聊天框、粘贴并发送。"
+            : modeDetail + "识别结果只复制到剪贴板，在游戏聊天框按 Ctrl+V 粘贴。";
         if (!_registered) MessageText.Text = "全局热键不可用，可在设置中更换；录音按钮仍可使用。";
     }
 

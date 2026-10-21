@@ -15,14 +15,8 @@
     <Border x:Name="Bubble"
             CornerRadius="14" Padding="22,14"
             Background="#F0101E30" BorderBrush="#B02E6BAA" BorderThickness="1.6"
-            Cursor="SizeAll"
-            ToolTip="按住拖动可以调整气泡弹出的位置（会自动记住）">
-        <StackPanel>
-            <TextBlock x:Name="BubbleText"
-                       Foreground="#F4F8FC" TextWrapping="Wrap" TextAlignment="Center"/>
-            <TextBlock x:Name="HintText" Text="拖动可挪位置"
-                       Foreground="#8FB2D4" FontSize="11" TextAlignment="Center"
-                       Margin="0,6,0,0"/>
-        </StackPanel>
+            Cursor="SizeAll">
+        <TextBlock x:Name="BubbleText"
+                   Foreground="#F4F8FC" TextWrapping="Wrap" TextAlignment="Center"/>
     </Border>
 </Window>
