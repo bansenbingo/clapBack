@@ -8,6 +8,7 @@ using ClapBack.Core;
 using ClapBack.Core.Abstractions;
 using ClapBack.Core.Controller;
 using ClapBack.Core.Models;
+using ClapBack.Core.Services;
 using ClapBack.Stt;
 using ClapBack.Stt.Audio;
 using ClapBack.Windows.Infrastructure;
@@ -62,8 +63,9 @@ public partial class App : System.Windows.Application
             _overlay.PositionChanged += (_, position) => { _ = SaveOverlayPositionAsync(position); };
             var recorder = new WavAudioRecorder(() => _microphones.ResolveIndex(_settings.MicrophoneDeviceId) ?? 0);
             var sender = new OverwatchTextSender(_clipboard,
-                () => _settings.ChatOpenKey.Equals("F2", StringComparison.OrdinalIgnoreCase) ? (ushort)0x71 : (ushort)0x0D,
-                () => false, () => _settings);
+                () => ChatSendPlanner.ChatOpenVirtualKey(_settings.ChatOpenKey),
+                () => ChatSendPlanner.SendVirtualKey(_settings.SendKey),
+                () => _settings.RestoreClipboard, () => _settings);
             var cloud = new WhisperCompatibleTranscriptionProvider(_http, () => _settings,
                 token => _credentialStore.GetAsync("ClapBack.Stt.ApiKey", token));
             var local = new LocalSenseVoiceTranscriptionProvider(() => _settings);

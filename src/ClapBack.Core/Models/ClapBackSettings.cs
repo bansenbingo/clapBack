@@ -100,7 +100,17 @@ public sealed record ClapBackSettings
     // LocalFirst 语义：仅当本地识别「抛异常」时才回退云端。
     // 本地返回空文本代表「确实没听清/没人说话」，默认不再把整段音频上传云端重试。
     public bool FallbackOnEmptyResult { get; init; }
+    /// <summary>
+    /// 自动发送时用来呼出游戏聊天框的单键，例如 <c>T</c>、<c>Enter</c>、<c>F2</c>。
+    /// 只接受单键（见 <c>ChatSendPlanner.TryParseKey</c>）；写错了会退回 Enter，不会让发送整体失效。
+    /// </summary>
     public string ChatOpenKey { get; init; } = "Enter";
+
+    /// <summary>
+    /// 自动发送时用来确认发出的单键。默认 <c>Enter</c>：粘贴完成后按一次把它发出去。
+    /// 与 <see cref="ChatOpenKey"/> 一样只接受单键，写错了退回 Enter。
+    /// </summary>
+    public string SendKey { get; init; } = "Enter";
 
     /// <summary>
     /// 识别完成后是否自动把文字粘贴进游戏聊天框并按回车发送。

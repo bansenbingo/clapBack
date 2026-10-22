@@ -34,7 +34,7 @@
                     <TextBlock Text="识别语言"/>
                     <ComboBox x:Name="LanguageComboBox" ToolTip="识别使用的语言；选“自动检测”由模型自行判断。"/>
                     <CheckBox x:Name="AutoSendCheckBox" Content="识别后自动打开游戏聊天、粘贴并发送"
-                              ToolTip="默认只复制文字，你在聊天框按 Ctrl+V。开启后会自动打开游戏聊天、粘贴并发送，这时请用全局热键在游戏中录音。"/>
+                               ToolTip="默认只复制文字，你在聊天框按 Ctrl+V。开启后固定按三步走：打开聊天 → Ctrl+V 粘贴 → Enter 发送；这时请用全局热键在游戏中录音。"/>
                     <TextBlock Text="自动发送的目标进程" Margin="0,10,0,6"/>
                     <DockPanel Margin="0,0,0,10">
                         <Button DockPanel.Dock="Right" Content="刷新列表" Click="RefreshProcessesClick" Margin="8,0,0,0"
@@ -51,10 +51,12 @@
                     <TextBlock Text="进程白名单"/>
                     <TextBox x:Name="TargetProcessesTextBox"
                              ToolTip="逗号分隔，可直接编辑。只有这里列出的进程才会被自动发送。"/>
-                    <TextBlock Text="打开聊天的按键"/>
-                    <ComboBox x:Name="ChatKeyComboBox" ToolTip="自动发送时用来打开游戏聊天的按键。">
-                        <ComboBoxItem Content="Enter"/><ComboBoxItem Content="F2"/>
-                    </ComboBox>
+                    <TextBlock Text="呼出聊天的按键"/>
+                    <TextBox x:Name="ChatOpenKeyTextBox" LostFocus="ChatKeyBoxLostFocus"
+                             ToolTip="填一个键的名字，例如 T 或 Enter。识别后先按它打开游戏聊天框。"/>
+                    <TextBlock Text="确认发送的按键"/>
+                    <TextBox x:Name="SendKeyTextBox" LostFocus="ChatKeyBoxLostFocus"
+                             ToolTip="填一个键的名字，例如 Enter。粘贴完成后按它把消息发出去，任意单键都可以。"/>
                     <CheckBox x:Name="RestoreClipboardCheckBox" Content="自动发送后恢复发送前的剪贴板" IsEnabled="False" Visibility="Collapsed"/>
                     <CheckBox x:Name="TranscriptNotificationCheckBox" Content="在通知气泡中显示识别文字"
                               ToolTip="识别完成后在右下角通知气泡里显示识别文字。"/>

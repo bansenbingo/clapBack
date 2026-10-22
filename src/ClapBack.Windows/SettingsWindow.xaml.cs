@@ -61,7 +61,8 @@ public partial class SettingsWindow : Window
         MaxSecondsTextBox.Text = settings.MaxRecordingSeconds.ToString();
         HotkeyTextBox.Text = settings.Hotkey;
         RefreshTargetProcesses(settings.TargetWindowProcessNames);
-        ChatKeyComboBox.SelectedIndex = settings.ChatOpenKey.Equals("F2", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        ChatOpenKeyTextBox.Text = settings.ChatOpenKey;
+        SendKeyTextBox.Text = settings.SendKey;
         HuggingFaceEndpointTextBox.Text = settings.HuggingFaceEndpoint;
         RuntimeEndpointTextBox.Text = settings.RuntimeDownloadEndpoint;
         ApiKeyBox.Password = apiKey;
@@ -87,6 +88,12 @@ public partial class SettingsWindow : Window
             ErrorText.Text = string.Empty;
             if (!HotkeyBinding.TryParse(HotkeyTextBox.Text, out var hotkey))
                 throw new InvalidOperationException("热键格式无效，例如 CapsLock、F8、Ctrl+Shift+Space。");
+            if (!ChatSendPlanner.TryParseKey(ChatOpenKeyTextBox.Text, out _, out var chatOpenKey))
+                throw new InvalidOperationException("呼出聊天的按键只能填单个按键，例如 T、Enter、F2。");
+            if (!ChatSendPlanner.TryParseKey(SendKeyTextBox.Text, out _, out var sendKey))
+                throw new InvalidOperationException("确认发送的按键只能填单个按键，例如 Enter、T、F2。");
+            if (string.Equals(chatOpenKey, sendKey, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("呼出聊天的按键和确认发送的按键不能相同，否则粘贴完会再敲一次同一个键。");
             var maxSeconds = Number(MaxSecondsTextBox.Text, 1, 300, "最长录音");
             var threads = Number(LocalThreadsTextBox.Text, 1, 64, "线程数");
             var timeout = Number(LocalTimeoutTextBox.Text, 1, 300, "识别超时");
@@ -131,7 +138,7 @@ public partial class SettingsWindow : Window
                 CloudProtocol = "WhisperCompatible", AutoSend = AutoSendCheckBox.IsChecked == true,
                 // The transcript is copied before sending, so the sender cannot restore an earlier user clipboard.
                 RestoreClipboard = false, TargetWindowProcessNames = LocalProcessCatalog.NormalizeList(TargetProcessesTextBox.Text),
-                ChatOpenKey = ChatKeyComboBox.SelectedIndex == 1 ? "F2" : "Enter",
+                ChatOpenKey = chatOpenKey, SendKey = sendKey,
                 ShowTranscriptInNotification = TranscriptNotificationCheckBox.IsChecked == true,
                 MinimizeToTray = MinimizeToTrayCheckBox.IsChecked == true,
                 RunAsAdministrator = RunAsAdministratorCheckBox.IsChecked == true,
@@ -388,6 +395,18 @@ public partial class SettingsWindow : Window
     {
         TargetProcessesTextBox.Text = string.Empty;
         ErrorText.Text = "已清空目标进程；开启自动发送前需要重新填写。";
+    }
+
+    /// <summary>
+    /// 离开输入框时把按键名改成规范写法（t → T、esc → Escape）。
+    /// 认不出来就原样留着，让“保存”时报错说明怎么填，而不是在这里悄悄清空。
+    /// </summary>
+    private void ChatKeyBoxLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.TextBox box && ChatSendPlanner.TryParseKey(box.Text, out _, out var name))
+        {
+            box.Text = name;
+        }
     }
 
     private static int Number(string value, int min, int max, string name) =>

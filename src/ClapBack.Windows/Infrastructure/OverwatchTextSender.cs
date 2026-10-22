@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using ClapBack.Core.Abstractions;
 using ClapBack.Core.Models;
+using ClapBack.Core.Services;
 
 namespace ClapBack.Windows.Infrastructure;
 
@@ -23,6 +24,7 @@ public sealed class OverwatchTextSender : ITextSender, ITargetWindowAware
 {
     private readonly WindowsClipboardService _clipboard;
     private readonly Func<ushort> _chatOpenKey;
+    private readonly Func<ushort> _sendKey;
     private readonly Func<bool> _restoreClipboard;
     private readonly Func<ClapBackSettings> _settings;
     private IntPtr _targetWindow;
@@ -30,11 +32,13 @@ public sealed class OverwatchTextSender : ITextSender, ITargetWindowAware
     public OverwatchTextSender(
         WindowsClipboardService clipboard,
         Func<ushort> chatOpenKey,
+        Func<ushort> sendKey,
         Func<bool> restoreClipboard,
         Func<ClapBackSettings> settings)
     {
         _clipboard = clipboard;
         _chatOpenKey = chatOpenKey;
+        _sendKey = sendKey;
         _restoreClipboard = restoreClipboard;
         _settings = settings;
     }
@@ -63,31 +67,36 @@ public sealed class OverwatchTextSender : ITextSender, ITargetWindowAware
                 "目标窗口白名单为空，拒绝发送文本。请在设置 TargetWindowProcessNames 中填入允许注入的进程名，例如 Overwatch,Overwatch2。");
         }
 
-        if (_targetWindow != IntPtr.Zero && !SetForegroundWindow(_targetWindow))
+        if (_targetWindow != IntPtr.Zero)
         {
-            throw new InvalidOperationException("无法切换到目标窗口，已取消发送。");
+            await ActivateAsync(_targetWindow, cancellationToken).ConfigureAwait(false);
         }
-
-        await Task.Delay(100, cancellationToken).ConfigureAwait(false);
 
         // 真正要注入的是「此刻」的前台窗口：切换窗口后必须重新校验。
-        var current = GetForegroundWindow();
-        if (!IsAllowed(current, allowedNames, settings.RequireTargetWindowMatch))
-        {
-            throw new InvalidOperationException(
-                $"前台窗口不是目标进程，当前：{DescribeProcess(current)}。已取消发送，未注入任何按键。");
-        }
+        var current = EnsureForeground(allowedNames, settings.RequireTargetWindowMatch);
 
         var snapshot = await _clipboard.CaptureAsync(cancellationToken).ConfigureAwait(false);
         var sentText = text;
         try
         {
             await _clipboard.SetTextAsync(sentText, cancellationToken).ConfigureAwait(false);
-            KeyboardInput.Press(_chatOpenKey());
-            await Task.Delay(80, cancellationToken).ConfigureAwait(false);
-            KeyboardInput.Press(0x11, 0x56); // Ctrl+V
-            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
-            KeyboardInput.Press(0x0D); // Enter
+
+            // 写进剪贴板后先给游戏一侧留出读取时间，再开始敲键。
+            await Task.Delay(60, cancellationToken).ConfigureAwait(false);
+
+            // 固定三步：打开聊天 → Ctrl+V 粘贴 → 按发送键发出。
+            // 两个按键都由设置决定，目标进程是守望先锋时每一步的等待更长，见 ChatSendPlanner。
+            var plan = ChatSendPlanner.Plan(_chatOpenKey(), _sendKey(), DescribeProcess(current));
+            foreach (var step in plan)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // 每一步之前都重新确认前台窗口：中途被切走就立刻停手，不把按键打到别处。
+                EnsureForeground(allowedNames, settings.RequireTargetWindowMatch);
+
+                KeyboardInput.Press(step.VirtualKey, step.Modifier);
+                await Task.Delay(step.WaitAfterMs, cancellationToken).ConfigureAwait(false);
+            }
         }
         finally
         {
@@ -121,6 +130,44 @@ public sealed class OverwatchTextSender : ITextSender, ITargetWindowAware
             // 剪贴板被其它进程锁定：恢复是尽力而为，不能把已经发出的文本算作失败。
             // （COMException 派生自 ExternalException，已被本分支覆盖。）
         }
+    }
+
+    /// <summary>
+    /// 把目标窗口切到前台。全屏独占的游戏经常第一次 <c>SetForegroundWindow</c> 不生效，
+    /// 所以先还原窗口再重试几次，最后以「前台窗口确实是它」为准，而不是看 API 的返回值。
+    /// </summary>
+    private static async Task ActivateAsync(IntPtr window, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            if (GetForegroundWindow() == window)
+            {
+                return;
+            }
+
+            ShowWindow(window, SwRestore);
+            SetForegroundWindow(window);
+            await Task.Delay(120, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (GetForegroundWindow() != window)
+        {
+            throw new InvalidOperationException(
+                "无法切换到目标窗口，已取消发送。全屏独占的游戏可能拒绝被切到前台，可改成「无边框窗口」再试。");
+        }
+    }
+
+    /// <summary>确认前台窗口属于白名单，返回该窗口句柄；不属于就抛错，一个键都不发。</summary>
+    private static IntPtr EnsureForeground(IReadOnlyCollection<string> allowedNames, bool requireMatch)
+    {
+        var window = GetForegroundWindow();
+        if (!IsAllowed(window, allowedNames, requireMatch))
+        {
+            throw new InvalidOperationException(
+                $"前台窗口不是目标进程，当前：{DescribeProcess(window)}。已取消发送，未注入任何按键。");
+        }
+
+        return window;
     }
 
     private static bool IsAllowed(IntPtr window) =>
@@ -194,6 +241,11 @@ public sealed class OverwatchTextSender : ITextSender, ITargetWindowAware
         }
     }
 
+    private const int SwRestore = 9;
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
 
@@ -208,44 +260,91 @@ internal static class KeyboardInput
 {
     private const uint InputKeyboard = 1;
     private const uint KeyUp = 0x0002;
+    private const uint Scancode = 0x0008;
+    private const uint ExtendedKey = 0x0001;
+    private const uint MapVkToVsc = 0;
 
-    public static void Press(params ushort[] keys)
+    /// <summary>
+    /// 按下到松开的间隔。游戏按帧采样，同一个消息批次里按下立刻松开会整帧漏掉，
+    /// 所以这里让键「按住」一小会儿再松开。
+    /// </summary>
+    private const int HoldMs = 22;
+
+    /// <summary>
+    /// 按一次单键或组合键：<c>Press(0x0D)</c> 是回车，<c>Press(0x56, 0x11)</c> 是 Ctrl+V。
+    /// </summary>
+    /// <param name="virtualKey">主键的虚拟键码。</param>
+    /// <param name="modifier">要同时按住的修饰键；<c>0</c> 表示没有。</param>
+    public static void Press(ushort virtualKey, ushort modifier = 0)
     {
-        foreach (var key in keys)
+        if (modifier != 0)
         {
-            Send(key, false);
+            Send(modifier, keyUp: false);
         }
 
-        for (var index = keys.Length - 1; index >= 0; index--)
+        Send(virtualKey, keyUp: false);
+        Thread.Sleep(HoldMs);
+        Send(virtualKey, keyUp: true);
+
+        if (modifier != 0)
         {
-            Send(keys[index], true);
+            Send(modifier, keyUp: true);
         }
     }
 
-    private static void Send(ushort key, bool keyUp)
+    private static void Send(ushort virtualKey, bool keyUp)
     {
+        // 完整的硬件事件要带扫描码：守望先锋这类用 Raw Input 读键盘的游戏只看扫描码，
+        // 只填虚拟键码的 SendInput 它收不到。
+        var scancode = (ushort)MapVirtualKey(virtualKey, MapVkToVsc);
+        var flags = keyUp ? KeyUp : 0u;
+        if (scancode != 0)
+        {
+            flags |= Scancode;
+            if ((scancode & 0xFF00) == 0xE000)
+            {
+                // 0xE0 前缀的扩展键（例如小键盘回车）要额外标记，扫描码只取低字节。
+                flags |= ExtendedKey;
+                scancode &= 0x00FF;
+            }
+        }
+
         var input = new Input
         {
             Type = InputKeyboard,
             Keyboard = new KeyboardInputData
             {
-                VirtualKey = key,
-                ScanCode = 0,
-                Flags = keyUp ? KeyUp : 0,
+                VirtualKey = virtualKey,
+                ScanCode = scancode,
+                Flags = flags,
                 Time = 0,
-                ExtraInfo = GetMessageExtraInfo()
+                // 不带 GetMessageExtraInfo()：注入事件应带 0，免得继承别的工具留下的标记。
+                ExtraInfo = IntPtr.Zero
             }
         };
+
         if (SendInput(1, new[] { input }, Marshal.SizeOf<Input>()) == 0)
         {
-            throw new InvalidOperationException("Windows 输入发送失败");
+            throw new InvalidOperationException(
+                $"Windows 输入发送失败（错误码 {Marshal.GetLastWin32Error()}）。");
         }
     }
 
-    [StructLayout(LayoutKind.Sequential)]
+    /// <summary>
+    /// 与 Win32 的 <c>INPUT</c> 逐字节对齐：x64 上是 40 字节。
+    /// <para>
+    /// 这里原来只放了键盘成员，结构体只有 8 + 24 = 32 字节；而 <c>SendInput</c> 要求 cbSize
+    /// 恰好等于 <c>sizeof(INPUT)</c>（x64 = 40），于是它每次都返回 0、代码抛「输入发送失败」——
+    /// 自动发送其实一个键都没发出去过。显式对齐到 40 字节后按键才真正生效。
+    /// </para>
+    /// </summary>
+    [StructLayout(LayoutKind.Explicit, Size = 40)]
     private struct Input
     {
+        [FieldOffset(0)]
         public uint Type;
+
+        [FieldOffset(8)]
         public KeyboardInputData Keyboard;
     }
 
@@ -263,5 +362,5 @@ internal static class KeyboardInput
     private static extern uint SendInput(uint numberOfInputs, Input[] inputs, int size);
 
     [DllImport("user32.dll")]
-    private static extern IntPtr GetMessageExtraInfo();
+    private static extern uint MapVirtualKey(uint code, uint mapType);
 }
